@@ -1,0 +1,22 @@
+# Usage on your server:
+#   1. cp .env.example .env  &&  fill in VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY
+#   2. docker compose up -d --build
+#   3. App is served on http://<server-ip>:8080 (put a reverse proxy /
+#      real domain + TLS in front of it — see README.md)
+#
+# To pick up new Supabase env values later, re-run with --build (Vite env
+# vars are baked in at build time).
+
+services:
+  crm:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+        VITE_DEMO_MODE: ${VITE_DEMO_MODE:-false}
+    container_name: vz-crm
+    restart: unless-stopped
+    ports:
+      - "8080:80"

@@ -1,0 +1,300 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 10%;
+    --primary: 0 0% 10%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 0 0% 10%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 45%;
+    --accent: 0 100% 40%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 100% 40%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 88%;
+    --input: 0 0% 88%;
+    --ring: 0 100% 40%;
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-size: 16px;
+    line-height: 1.5;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-brand-black text-white px-4 py-2 rounded-md font-medium text-sm hover:bg-opacity-90 transition-all duration-200 inline-flex items-center gap-2 min-h-[44px];
+  }
+  .btn-secondary {
+    @apply bg-white border border-brand-gray-mid text-brand-black px-4 py-2 rounded-md font-medium text-sm hover:bg-brand-gray transition-all duration-200 inline-flex items-center gap-2 min-h-[44px];
+  }
+  .btn-danger {
+    @apply bg-brand-red text-white px-4 py-2 rounded-md font-medium text-sm hover:bg-brand-red-dark transition-all duration-200 inline-flex items-center gap-2 min-h-[44px];
+  }
+  .btn-activate {
+    @apply bg-green-600 text-white px-4 py-2 rounded-md font-medium text-sm hover:bg-green-700 transition-all duration-200 inline-flex items-center gap-2 min-h-[44px];
+  }
+  .form-input {
+    @apply w-full border border-brand-gray-mid rounded-md px-3 py-2 text-sm text-brand-black bg-white focus:outline-none focus:ring-2 focus:ring-brand-red focus:border-transparent transition-all duration-200;
+    min-height: 40px;
+  }
+  .form-label {
+    @apply block text-sm font-medium text-brand-black mb-1;
+  }
+  .card-base {
+    @apply bg-white rounded-lg border border-brand-gray-mid shadow-sm;
+  }
+  .status-badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+  /* ── Sidebar: минимализм, монотонные контурные иконки (Lucide) ── */
+  .sidebar-link {
+    @apply relative flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-200 cursor-pointer min-h-[44px] max-lg:min-h-[52px] max-lg:text-[15px] max-lg:py-3;
+  }
+  .sidebar-link-active {
+    @apply bg-red-50 text-brand-red font-semibold;
+  }
+  .sidebar-link-inactive {
+    @apply text-gray-500 hover:bg-gray-50 hover:text-brand-black;
+  }
+  .sidebar-link .nav-indicator {
+    @apply absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 rounded-r-full bg-brand-red opacity-0 transition-opacity duration-200;
+  }
+  .sidebar-link-active .nav-indicator {
+    @apply opacity-100;
+  }
+  /* ── Bottom nav: плавающая панель, иконки без подложек ── */
+  .bottom-nav-link {
+    @apply flex-1 flex items-center justify-center py-2 transition-colors duration-200 min-h-[52px] min-w-0;
+  }
+  .bottom-nav-link-active {
+    @apply text-brand-red;
+  }
+  .bottom-nav-link-inactive {
+    @apply text-gray-400 hover:text-gray-600;
+  }
+  .tab-button {
+    @apply px-4 py-2 text-sm font-medium border-b-2 transition-colors duration-200 whitespace-nowrap;
+  }
+  .tab-active {
+    @apply border-brand-red text-brand-red;
+  }
+  .tab-inactive {
+    @apply border-transparent text-gray-500 hover:text-brand-black hover:border-gray-300;
+  }
+  .table-header {
+    @apply bg-brand-gray text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-3 text-left;
+  }
+  .table-cell {
+    @apply px-4 text-sm text-brand-black;
+    padding-top: 0.3rem; /* ТЗ v1.23.52: плотнее */
+    padding-bottom: 0.3rem;
+  }
+  .table-row {
+    @apply border-b border-brand-gray-mid hover:bg-brand-gray transition-colors duration-150 cursor-pointer;
+  }
+  .stat-card {
+    @apply card-base p-4 flex flex-col gap-2;
+  }
+  .page-title {
+    @apply text-xl font-bold text-brand-black;
+  }
+  .section-title {
+    @apply text-base font-semibold text-brand-black;
+  }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f5f5f5;
+}
+::-webkit-scrollbar-thumb {
+  background: #d0d0d0;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #aaa;
+}
+
+/* Mobile sidebar overlay */
+.sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 40;
+}
+
+/* Animations */
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Print */
+@media print {
+  .no-print { display: none !important; }
+}
+
+/* Mobile table scroll */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ============================================================
+   Мобильная адаптация (ТЗ v1.22.4): только стили, масштабы
+   и шрифты. Логика и разметка не затрагиваются.
+   ============================================================ */
+@media (max-width: 640px) {
+  /* Шрифты: мягкий даунскейл заголовков */
+  .page-title { font-size: 1.05rem; line-height: 1.3; }
+  .section-title { font-size: 0.8rem; }
+  h1 { font-size: 1.15rem; }
+  h2 { font-size: 1rem; }
+  h3 { font-size: 0.9rem; }
+
+  /* Карточки и статистика */
+  .card-base { border-radius: 0.5rem; }
+  .stat-card { padding: 0.65rem; gap: 0.375rem; }
+  .stat-card .text-2xl { font-size: 1.15rem; }
+  .stat-card .text-3xl { font-size: 1.3rem; }
+
+  /* Таблицы: компактнее, горизонтальный скролл сохранён */
+  .table-header, .table-cell { padding: 0.45rem 0.4rem; font-size: 11px; }
+
+  /* Защита от горизонтального переполнения: фиксированные min-w у форм
+     на узком экране ужимаются */
+  [class*="min-w-["] { min-width: 0 !important; }
+  [class*="max-w-["] { max-width: 100% !important; }
+  .table-scroll { margin: 0 -0.25rem; padding: 0 0.25rem; }
+
+  /* Тач-цели и поля: iOS не зумит фокус при 16px, кнопки ≥40px */
+  input, select, textarea { font-size: 16px; }
+  .btn-primary, .btn-secondary, .btn-danger { min-height: 40px; }
+
+  /* ТЗ v1.22.6 (мобильная вёрстка):
+     1) строка поиска в фильтрах — на всю ширину, селекты переносятся ниже
+     (раньше min-w-0 сжимал поиск до нечитаемого) */
+  [class*="min-w-["].flex-1 { flex-basis: 100% !important; }
+
+  /* 2) вкладки компактнее, чтобы больше помещалось + заметный скролл */
+  [class*="tab-button"] { padding: 0.45rem 0.65rem !important; font-size: 12px !important; }
+  .overflow-x-auto { scrollbar-width: thin; -webkit-overflow-scrolling: touch; }
+  .overflow-x-auto::-webkit-scrollbar { height: 4px; }
+  .overflow-x-auto::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 2px; }
+
+  /* 3) дата-поля и мелкие подписи в фильтрах не обрезаются */
+  input[type="date"] { min-width: 0; }
+  .text-xs.text-gray-400 { flex-shrink: 0; }
+}
+
+/* Совсем узкие экраны (iPhone SE 375 и ужеже) */
+@media (max-width: 380px) {
+  .page-title { font-size: 1rem; }
+  .section-title { font-size: 0.75rem; }
+  .stat-card .text-2xl { font-size: 1.05rem; }
+}
+
+/* ============================================================
+   ТЗ v1.22.36: однотонный минималистичный «салют» успеха
+   (экран успешной отправки публичных форм)
+   ============================================================ */
+.salute { position: relative; width: 56px; height: 56px; margin: 0 auto; }
+.salute::before {
+  content: ''; position: absolute; left: 50%; top: 50%;
+  width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 9999px;
+  background: #16a34a; animation: salute-core 1.8s ease-in-out infinite;
+}
+.salute i {
+  position: absolute; left: 50%; top: 50%;
+  width: 5px; height: 5px; margin: -2.5px 0 0 -2.5px; border-radius: 9999px;
+  background: #16a34a; opacity: 0;
+  animation: salute-pop 1.8s cubic-bezier(.2,.7,.3,1) infinite;
+}
+.salute i:nth-child(1) { --sx: -20px; --sy: -14px; }
+.salute i:nth-child(2) { --sx: -8px;  --sy: -24px; animation-delay: .08s; }
+.salute i:nth-child(3) { --sx: 8px;   --sy: -24px; animation-delay: .16s; }
+.salute i:nth-child(4) { --sx: 20px;  --sy: -14px; animation-delay: .24s; }
+.salute i:nth-child(5) { --sx: 24px;  --sy: 2px;   animation-delay: .32s; }
+.salute i:nth-child(6) { --sx: 12px;  --sy: 18px;  animation-delay: .40s; }
+.salute i:nth-child(7) { --sx: -12px; --sy: 18px;  animation-delay: .48s; }
+.salute i:nth-child(8) { --sx: -24px; --sy: 2px;   animation-delay: .56s; }
+@keyframes salute-pop {
+  0%   { transform: translate(0, 0) scale(.6); opacity: 0; }
+  15%  { opacity: 1; }
+  100% { transform: translate(var(--sx), var(--sy)) scale(1); opacity: 0; }
+}
+@keyframes salute-core {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50%      { transform: scale(1.5); opacity: .55; }
+}
+
+/* ТЗ v1.23.52: на вкладке «Логи синка» скрываем всё, кроме вкладок и панели лога */
+.sync-log-mode > *:not(:first-child):not(.sync-log-panel) { display: none !important; }
+.sync-log-panel .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.sync-log-panel table { min-width: 760px; } /* боковой скролл на узких экранах */
+
+
+/* ═══ v1.31.3: панель действий раздела — парящая подложка без обводки + единые кнопки ═══ */
+.actions-bar {
+  background: #fff;
+  border-radius: 1rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 4px 14px rgba(0, 0, 0, 0.05);
+  padding: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* v1.31.4: единый дизайн кнопок меню доп.категорий — без обводки, 25px,
+   наводка #F5F5F5, активный фон #E0E0E0. Абсолютно одинаковые во всех разделах. */
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  min-height: 25px;
+  padding: 0 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 0.5rem;
+  border: 0;
+  background: transparent;
+  color: #4B5563;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.action-btn:hover { background: #F5F5F5; color: #1A1A1A; }
+/* v1.31.5: активный пункт — красный текст (как в Продвижении) + серый фон */
+.action-btn-active { background: #E0E0E0; color: #DC2626 !important; }
+/* v1.31.8: кнопки синих панелей — единый размер 33px */
+.action-btn-md { min-height: 33px; }
