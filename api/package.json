@@ -1,0 +1,36 @@
+{
+  "name": "vz-erp-api",
+  "version": "1.35.3",
+  "private": true,
+  "description": "VZ ERP API — замена PostgREST + Edge Functions + Auth Supabase (NestJS + Fastify)",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fastify/cors": "^9.0.1",
+    "@nestjs/common": "^10.4.0",
+    "@nestjs/core": "^10.4.0",
+    "@nestjs/platform-fastify": "^10.4.0",
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^18.0.9",
+    "fastify": "^4.28.0",
+    "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^6.9.14",
+    "pg": "^8.12.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/node": "^20.14.0",
+    "@types/nodemailer": "^6.4.15",
+    "@types/pg": "^8.11.6",
+    "typescript": "^5.5.3"
+  },
+  "overrides": {
+    "fastify": "$fastify"
+  }
+}

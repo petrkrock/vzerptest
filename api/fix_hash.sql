@@ -1,0 +1,1 @@
+UPDATE public.profiles SET password_hash = '$2a$10$r5P.X4xcsehuuMVsRi9oRuduTIZq2juy.GwzR3PwFsHeTgTVPc1xi' WHERE email = 'admin@vz.tech';
