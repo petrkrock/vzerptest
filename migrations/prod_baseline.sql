@@ -838,6 +838,17 @@ ALTER TABLE public.suppliers ADD COLUMN IF NOT EXISTS cab_contact text;
 ALTER TABLE public.suppliers ADD COLUMN IF NOT EXISTS cab_phone text;
 ALTER TABLE public.suppliers ADD COLUMN IF NOT EXISTS cab_email text;
 ALTER TABLE public.suppliers ADD COLUMN IF NOT EXISTS service_search_conditions jsonb;
+-- v1.35.3-fix4: колонка contacts (jsonb-массив контактов) была в схеме 1.31.18,
+-- при порте потерялась → CRM шлёт её в /sync/ops → UPDATE поставщика падал целиком
+-- (ни ссылка ЛК, ни PIN не сохранялись).
+ALTER TABLE public.suppliers ADD COLUMN IF NOT EXISTS contacts jsonb NOT NULL DEFAULT '[]';
+-- v1.35.3-fix4: те же поля есть в типах фронта и реально шлются в /sync/ops
+-- (массовые операции CRM), без колонок любой create/update сущности падал.
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS entity_kind TEXT;
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS entity_ids jsonb;
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS export_kind TEXT;
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS lead_ids jsonb;
+ALTER TABLE public.tickets ADD COLUMN IF NOT EXISTS created_by TEXT;
 -- fallback-хранилище PIN (приоритет — service_access.pin).
 ALTER TABLE public.suppliers ADD COLUMN IF NOT EXISTS pin TEXT;
 -- v1.35.3: ЛК ставит 'В работе' при сохранении условий проценки (lk.service.ts) —

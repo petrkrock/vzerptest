@@ -115,23 +115,26 @@ export class LkService {
     if (body.email !== undefined) patch.email = String(body.email || '');
     if (body.priceEmail !== undefined) patch.price_email = String(body.priceEmail || '');
 
-    // 4. Принятие оферты (bridge v1.35: пишем и в service_access — зеркало эталона,
-    //    и в offerContracts[0].acceptedEdition — для CRM «Настройки → Договоры оферты»)
+    // 4. Принятие оферты — acceptedEdition пишем во ВКЛЮЧЁННЫЙ договор оферты
+    //    (зеркало эталона: findIndex(c => c.enabled)) и в service_access поставщика.
     if (body.acceptOfferEdition !== undefined) {
       const edition = String(body.acceptOfferEdition || '');
       const sa = { ...(supplier.service_access || {}) };
       const changed = edition !== String(sa.offerAcceptedEdition || '');
       sa.offerAcceptedEdition = edition;
       const when = new Date().toISOString();
+      const ocIdx = ((settings.offerContracts || []) as Array<Record<string, unknown>>).findIndex(c => c.enabled);
       await this.db.withAdmin(async c => {
         await c.query(
           `UPDATE public.suppliers SET service_access = $1::jsonb WHERE id = $2`,
           [JSON.stringify(sa), supplier.id],
         );
-        await c.query(
-          `UPDATE public.app_settings SET settings = jsonb_set(settings, '{offerContracts,0,acceptedEdition}'::text[], $1::jsonb, true) WHERE id = 'global'`,
-          [JSON.stringify(edition)],
-        );
+        if (ocIdx >= 0) {
+          await c.query(
+            `UPDATE public.app_settings SET settings = jsonb_set(settings, $1::text[], $2::jsonb, true) WHERE id = 'global'`,
+            [`{offerContracts,${ocIdx},acceptedEdition}`, JSON.stringify(edition)],
+          );
+        }
       });
       if (changed) {
         const hist = Array.isArray(supplier.history) ? [...supplier.history] : [];
@@ -331,12 +334,17 @@ export class LkService {
   // ─────────────────────────────────────────────────────────────
   private async protectedData(supplier: SupplierRow, settings: Record<string, unknown>) {
     const sa = supplier.service_access || {};
-    const offer = this.resolveOffer(settings);
+    // Договор оферты — только ВКЛЮЧЁННЫЙ контракт из CRM (зеркало v1.31.18).
+    const enabledContract = ((settings.offerContracts || []) as Array<Record<string, unknown>>).find(c => c.enabled) || null;
     const resolved = this.resolveMediaContract(settings, supplier.id);
     const domain = await this.readDomain(supplier.domain_id);
     const placements = await this.readPlacements(supplier.id);
     const myNews = (((settings.marketNews || []) as Array<Record<string, unknown>>)
       .filter(n => String(n.supplierId) === supplier.id));
+    const c0 = Array.isArray(supplier.contacts) ? supplier.contacts[0] : undefined;
+    // Оператор ЛК — назначенный ответственному поставщика (справочник CRM).
+    const lkOp = (((settings.lkOperators || []) as Array<Record<string, unknown>>)
+      .find(o => String(o.userId || '') === String(supplier.responsible_id || ''))) || null;
     const now = new Date().toISOString();
 
     return {
@@ -345,50 +353,75 @@ export class LkService {
       phone: supplier.phone || '',
       myNews,
       placements,
-      // v1.35.3-fix3: фронт читает d.lkDomain.title — отдаём объект домена.
       lkDomain: domain ? {
         host: String(domain.host || ''),
         title: String(domain.title || ''),
         greeting: String(domain.greeting || ''),
       } : null,
       cabinetTitle: String(settings.cabinetTitle || ''),
-      services: settings.lkServices || [],
+      // Сервисы продаж: публичные имена из справочника CRM.
+      services: ((settings.supplierServices || []) as Array<Record<string, unknown>>)
+        .map(x => ({ code: String(x.name || ''), label: String(x.publicName || x.name || '') })),
       mediaContract: resolved ? {
         contractNo: resolved.contractNo,
         contractDate: resolved.contractDate,
         status: resolved.status,
       } : null,
-      adFormats: settings.mediaAdTypes || [],
-      // v1.35.3-fix3: фронт читает offer как объект {edition, name, text} —
-      // отдаём оферту целиком (текст — в text, как в эталоне).
-      offer: {
-        name: String(offer.name || ''),
-        edition: String(offer.edition || ''),
-        lkTitle: String(offer.lkTitle || ''),
-        lkGreeting: String(offer.lkGreeting || ''),
-        text: String(offer.text || offer.lkOffer || ''),
-      },
+      adFormats: ((settings.mediaAdTypes || []) as Array<Record<string, unknown>>)
+        .filter(a => a.enabled !== false)
+        .map(a => ({
+          id: String(a.id || ''),
+          name: String(a.name || ''),
+          description: String(a.description || ''),
+          pricePerMonth: Number(a.pricePerMonth) || 0,
+          durations: ((a.durationOptions || []) as Array<Record<string, unknown>>).map(d => ({
+            id: String(d.id || ''),
+            periodLabel: String(d.periodLabel || ''),
+            periodMonths: Number(d.periodMonths) || 0,
+            discount: Number(d.discount) || 0,
+            totalPrice: Math.round((Number(a.pricePerMonth) || 0) * (Number(d.periodMonths) || 1) * (1 - (Number(d.discount) || 0) / 100)),
+          })),
+        })),
+      offer: enabledContract ? {
+        name: String(enabledContract.name || ''),
+        edition: String(enabledContract.edition || ''),
+        publishedAt: String(enabledContract.publishedAt || ''),
+        effectiveAt: String(enabledContract.effectiveAt || ''),
+        text: String(enabledContract.text || ''),
+      } : null,
       offerAcceptedEdition: String(sa.offerAcceptedEdition || ''),
-      lkOperator: String(settings.lkOperator || ''),
+      lkOperator: lkOp ? {
+        name: String(lkOp.name || ''),
+        avatar: String(lkOp.avatar || ''),
+        phone: String(lkOp.phone || ''),
+        email: String(lkOp.email || ''),
+        maxLink: String(lkOp.maxLink || ''),
+      } : null,
+      // Весь блок «О компании» фронт читает из cabinet — состав зеркален эталону.
       cabinet: {
-        contact: supplier.cab_contact || '',
-        phone: supplier.cab_phone || '',
-        email: supplier.cab_email || '',
-        edo: supplier.edo_operator || supplier.edo_token || '',
+        tradeName: supplier.trade_name || supplier.name || '',
+        city: supplier.city || '',
+        inn: supplier.inn || '',
+        website: supplier.website || '',
+        type: supplier.type || '',
+        contactName: String(c0?.name ?? '') || supplier.contact_name || '',
+        contactRole: supplier.contact_role || '',
+        contactPhone: String(c0?.phone ?? '') || supplier.phone || '',
+        contactEmail: String(c0?.email ?? '') || supplier.email || '',
+        services: supplier.services || [],
+        productGroups: supplier.product_groups || [],
+        ownBrands: supplier.own_brands || [],
+        edoOperator: supplier.edo_operator || '',
+        edoToken: supplier.edo_token || '',
+        active: Boolean(supplier.edo_operator),
+        edoOperators: (settings.edoOperators || []) as string[],
+        priceEmail: supplier.price_email || '',
       },
       companyName: supplier.trade_name || supplier.name || '',
       inn: supplier.inn || '',
-      contactName: supplier.contact_name || '',
-      contactRole: supplier.contact_role || '',
-      contactPhone: supplier.phone || '',
-      contactEmail: supplier.email || '',
-      // v1.35.3-fix3: поля для блоков «О компании» (О поставщике/Ассортимент/Представитель).
-      type: supplier.type || '',
-      website: supplier.website || '',
-      city: supplier.city || '',
-      productGroups: supplier.product_groups || [],
-      ownBrands: supplier.own_brands || [],
-      supplierServices: supplier.services || [],
+      contactName: String(c0?.name ?? '') || supplier.contact_name || '',
+      contactPhone: String(c0?.phone ?? '') || supplier.phone || '',
+      contactEmail: String(c0?.email ?? '') || supplier.email || '',
       multiWarehouse: await this.readMultiwarehouse(supplier.id),
       warehouses: supplier.warehouse_locations || [],
       serviceSearch: supplier.service_search || [],
@@ -489,24 +522,6 @@ export class LkService {
     await this.db.withAdmin(c =>
       c.query(`UPDATE public.app_settings SET settings = $1::jsonb, updated_at = now() WHERE id = 'global'`, [JSON.stringify(next)]),
     );
-  }
-
-  // Bridge v1.35: оферта для ЛК из offerContracts (CRM «Настройки → Договоры оферты»),
-  // fallback — supplier_offer[0] (легаси-хранилище).
-  private resolveOffer(settings: Record<string, unknown>) {
-    const contracts = (settings.offerContracts as Array<Record<string, unknown>>) || [];
-    const c0 = contracts.find(c => c.enabled) || contracts[0];
-    const so = ((settings.supplier_offer as Array<Record<string, unknown>>) || [])[0];
-    const base = so || {};
-    return {
-      name: String(c0?.name ?? base.name ?? ''),
-      edition: String(c0?.edition ?? base.edition ?? ''),
-      lkTitle: String(c0?.lkTitle ?? base.lkTitle ?? ''),
-      lkGreeting: String(c0?.lkGreeting ?? base.lkGreeting ?? ''),
-      lkOffer: String(c0?.lkOffer ?? base.text ?? base.lkOffer ?? ''),
-      text: String(c0?.lkOffer ?? base.text ?? base.lkOffer ?? ''),
-      acceptedEdition: String(c0?.acceptedEdition ?? base.acceptedEdition ?? ''),
-    };
   }
 
   // Активный договор поставщика из settings.mediaContracts (приоритет: Активный с №).
