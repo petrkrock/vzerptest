@@ -531,8 +531,8 @@ function handleMassStatus() {
               {suppliers.slice(0, listShown).map(s => (
                 <tr key={s.id} className={`table-row ${s.deletedAt ? 'opacity-50' : ''}`} onClick={() => navigate(`/suppliers/${s.id}`)}>
                   <td className="table-cell" onClick={e => e.stopPropagation()}><input type="checkbox" checked={selected.includes(s.id)} onChange={() => toggleSelect(s.id)} className="rounded" /></td>
-                  {/* v1.30.98: постоянный ID под названием */}
-                  <td className="table-cell font-medium">{s.tradeName}{!s.responsibleId && <span className="text-brand-red ml-0.5" title="Нет ответственного — запись видна всем менеджерам">*</span>}<p className="text-[10px] font-mono text-gray-400 font-normal mt-0.5" title={`Внутренний ID: ${s.id}`}>{s.serviceAccess?.token || s.id}</p></td>
+                  {/* v1.30.98: постоянный ID под названием (публичный, как в 1.31.18) */}
+                  <td className="table-cell font-medium">{s.tradeName}{!s.responsibleId && <span className="text-brand-red ml-0.5" title="Нет ответственного — запись видна всем менеджерам">*</span>}<p className="text-[10px] font-mono text-gray-400 font-normal mt-0.5" title={`Внутренний ID: ${s.id}`}>{s.publicId || s.id}</p></td>
                   <td className="table-cell hidden sm:table-cell text-xs text-gray-500">{s.type}</td>
                   <td className="table-cell hidden md:table-cell text-xs">{s.city}</td>
                   <td className="table-cell">
