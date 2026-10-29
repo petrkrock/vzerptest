@@ -512,10 +512,14 @@ function setWarehouseStatus(locId: string, status: WarehouseStatus) {
                           <div className="flex flex-wrap items-center gap-2">
                             <input className="form-input text-xs w-32 !border-red-300 !bg-red-50/40 focus:!border-red-500" placeholder="PIN *" value={pinDraft} maxLength={6} onChange={e => setPinDraft(e.target.value.replace(/\D/g, ''))} />
                             <button onClick={() => {
+                              const pin = pinDraft.trim();
+                              // v1.35.3: подпись «обязателен · 4–6 цифр» раньше не проверялась —
+                              // можно было сохранить 1–3 цифры или пустым (пустой даже удалял PIN).
+                              if (!/^\d{4,6}$/.test(pin)) { toast.error('PIN: 4–6 цифр'); return; }
                               const phrase = window.prompt('Для смены PIN введите слово: сменить');
                               if (phrase === null) return;
                               if (phrase.trim().toLowerCase() !== 'сменить') { toast.error('Фраза не совпала — PIN не изменён'); return; }
-                              patchServiceAccess({ pin: pinDraft.trim() || undefined }, 'PIN самообслуживания обновлён');
+                              patchServiceAccess({ pin }, 'PIN самообслуживания обновлён');
                               toast.success('PIN сохранён');
                             }} className="btn-secondary text-xs">Сменить PIN</button>
                             <span className="text-[10px] font-semibold text-red-600">PIN-код обязателен к заполнению · 4–6 цифр</span>

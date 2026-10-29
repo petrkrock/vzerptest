@@ -73,6 +73,10 @@ export default function SupplierServicePage() {
   const [nnBusy, setNnBusy] = useState(false);
   const [activateModalOpen, setActivateModalOpen] = useState(false);
   const [activateBusy, setActivateBusy] = useState(false);
+  // v1.35.3: API ждёт activateMediaContract: {code, date} (валидирует номер и дату) —
+  // поля договора вводятся здесь, а не слалось boolean true → 400.
+  const [amcCode, setAmcCode] = useState('');
+  const [amcDate, setAmcDate] = useState('');
   const [cabinet, setCabinet] = useState<Record<string, unknown> | null>(null);
   const [cabEdit, setCabEdit] = useState(false);
   const [dash, setDash] = useState<Record<string, unknown> | null>(null);
@@ -329,7 +333,7 @@ export default function SupplierServicePage() {
       const r = await fetch(`${API_URL}/lk`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, pin: pinCode, activateMediaContract: true }),
+        body: JSON.stringify({ token, pin: pinCode, activateMediaContract: { code: amcCode.trim(), date: amcDate } }),
       });
       const d = await r.json().catch(() => ({}));
       if (r.ok) { toast.success('Договор активирован'); setActivateModalOpen(false); loadLkInfo(); }
@@ -905,6 +909,14 @@ export default function SupplierServicePage() {
                 <div className="relative bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 space-y-4 animate-fade-in">
                   <h3 className="text-base font-bold text-gray-900">Активация договора</h3>
                   <p className="text-sm text-gray-600 leading-relaxed bg-gray-50 border border-gray-100 rounded-xl p-3">Активация договора на размещение материала на платформе ни к чему вас не обязывает. Подписание договора происходит посредством ЭДО. Добавьте свой идентификатор ЭДО в личном кабинете.</p>
+                  <div>
+                    <label className="form-label text-xs">Номер договора *</label>
+                    <input className="form-input text-xs" value={amcCode} onChange={e => setAmcCode(e.target.value)} placeholder="Например: МСС-2025/01" />
+                  </div>
+                  <div>
+                    <label className="form-label text-xs">Дата договора *</label>
+                    <input type="date" className="form-input text-xs" value={amcDate} onChange={e => setAmcDate(e.target.value)} />
+                  </div>
                   <div className="flex gap-2 pt-1">
                     <button type="button" disabled={activateBusy} onClick={activateMediaContract} className="flex-1 text-sm font-semibold px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">{activateBusy ? 'Активация...' : 'Активировать'}</button>
                     <button type="button" disabled={activateBusy} onClick={() => setActivateModalOpen(false)} className="flex-1 text-sm font-semibold px-4 py-2 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors">Отменить</button>
