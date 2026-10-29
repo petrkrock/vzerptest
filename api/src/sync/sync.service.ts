@@ -145,10 +145,12 @@ export class SyncService {
 
             // v1.34.6: для поставщика генерируем ТОЛЬКО service_access.token,
             // если его нет (для ссылки ЛК). PIN не генерируем — он ручной.
+            // v1.35.3: enabled НЕ ставим — самообслуживание активируется только
+            // кнопкой «Выдать ссылку» в CRM (иначе доступ выдавался автоматически).
             if (table === 'public.suppliers') {
               const sa = data.serviceAccess as Record<string, unknown> | undefined;
               if (!sa || !sa.token) {
-                data.serviceAccess = { ...(sa || {}), token: randomBytes(16).toString('hex'), enabled: true };
+                data.serviceAccess = { ...(sa || {}), token: randomBytes(16).toString('hex') };
               }
             }
 

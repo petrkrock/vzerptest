@@ -53,6 +53,7 @@ interface SupplierRow {
   pricing_accepted_at?: string;
   lk_operator?: string;
   lk_offer?: unknown;
+  media_contract_json?: string;
   history?: Array<Record<string, unknown>>;
   deleted_at?: string;
   multiWarehouse?: boolean;
@@ -119,6 +120,9 @@ export class LkService {
       status: supplier.status || '',
       pricingStatus: supplier.pricing_status || '',
       warehouses: supplier.warehouse_locations || [],
+      // v1.35.3: фронт после POST обновляет проценку из ответа (d.serviceSearch);
+      // без этого ключа обновление было только через F5.
+      serviceSearch: supplier.service_search || [],
       availableCities,
     };
   }
@@ -501,7 +505,10 @@ export class LkService {
         vals,
       ),
     );
-    return { ok: true, saved: patchKeys };
+    // v1.35.3: фронт после успешного POST обновляет стейт из тела ответа (d.warehouses,
+    // d.serviceSearch и т.д.), а бэк возвращал только {ok, saved} → данные были
+    // «старыми» до F5. Отдаём свежий getInfo — то, что фронт уже умеет принимать.
+    return { ok: true, saved: patchKeys, ...(await this.getInfo(String(body.token || ''))) };
   }
 
   private readPin(supplier: SupplierRow): string | undefined {
@@ -612,9 +619,30 @@ export class LkService {
 
     const dom = domRow as Record<string, unknown> | undefined;
 
+    // v1.35.3: договор для блока «Активные сервисы продаж». Раньше ЛК его не отдавал
+    // вообще → «Договор не найден». Источники: media_contract_json (активация в ЛК),
+    // fallback — settings.mediaContracts (договор заведён менеджером в CRM).
+    let mediaContract: Record<string, unknown> | null = null;
+    try {
+      const parsed = JSON.parse(String(supplier.media_contract_json || '{}')) as Record<string, unknown>;
+      if (parsed && (parsed.number || parsed.contractNo)) {
+        mediaContract = {
+          contractNo: parsed.contractNo || parsed.number,
+          contractDate: parsed.contractDate || parsed.date,
+          status: parsed.status === 'Действующий' ? 'Активный' : (parsed.status || 'Активный'),
+        };
+      }
+    } catch { /* некорректный json — пробуем следующий источник */ }
+    if (!mediaContract) {
+      const mcs = (settings.mediaContracts || []) as Array<Record<string, unknown>>;
+      const mc = mcs.find(c => String(c.supplierId) === supplier.id);
+      if (mc) mediaContract = { contractNo: mc.contractNo || '', contractDate: mc.contractDate || '', status: mc.status || 'Новый' };
+    }
+
     return {
       ok: true,
       view: deletedView ? 'deleted' : 'active',
+      mediaContract,
       companyName: supplier.trade_name || supplier.name || '',
       inn: supplier.inn || '',
       domainId: supplier.domain_id || DEFAULT_DOMAIN_ID,
@@ -725,21 +753,13 @@ export class LkService {
   }
 
   private async readMultiwarehouse(id: string): Promise<boolean> {
-    try {
-      const { rows } = await this.db.withAdmin(c =>
-        c.query(`SELECT multiwarehouse AS f FROM public.suppliers WHERE id = $1`, [id]),
-      );
-      return Boolean(rows[0]?.f);
-    } catch {
-      try {
-        const { rows } = await this.db.withAdmin(c =>
-          c.query(`SELECT multiWarehouse AS f FROM public.suppliers WHERE id = $1`, [id]),
-        );
-        return Boolean(rows[0]?.f);
-      } catch {
-        return false;
-      }
-    }
+    // v1.35.3: реальная колонка — multi_warehouse (snake). Раньше запрашивались
+    // multiwarehouse / multiWarehouse, которых нет → catch → всегда false,
+    // из-за этого мультисклад не активировался в ЛК.
+    const { rows } = await this.db.withAdmin(c =>
+      c.query(`SELECT multi_warehouse AS f FROM public.suppliers WHERE id = $1`, [id]),
+    );
+    return Boolean(rows[0]?.f);
   }
 
   private async readSettings(): Promise<Record<string, unknown>> {

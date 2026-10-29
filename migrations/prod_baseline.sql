@@ -22,6 +22,27 @@ CREATE SCHEMA IF NOT EXISTS commerce;
 COMMENT ON SCHEMA commerce IS 'Торговый домен (parts, offers, orders, shipments) — только сюда. CRM — в public.*';
 
 -- ============================================================
+-- ROLES (v1.35.3: миграция создаёт прикладные роли сама; ручной сценарий
+-- CREATE ROLE из README не ломается — существующие роли пропускаются)
+-- ============================================================
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_user') THEN
+    CREATE ROLE app_user LOGIN PASSWORD 'app_pass';
+  END IF;
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_admin') THEN
+    CREATE ROLE app_admin LOGIN PASSWORD 'admin_pass' BYPASSRLS;
+  END IF;
+  -- легаси-роль Supabase-эпохи: без неё падают CREATE POLICY/GRANT ... TO authenticated;
+  -- под ней никто не подключается (API ходит как app_user/app_admin)
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'authenticated') THEN
+    CREATE ROLE authenticated NOLOGIN;
+  END IF;
+END $$;
+
+-- права прикладных ролей выдаются ПОСЛЕ создания всех таблиц — в конце файла.
+
+-- ============================================================
 -- CORE TABLES
 -- ============================================================
 
@@ -303,6 +324,56 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql STABLE;
 
+-- ============================================================
+-- PERMISSION HELPERS (v1.35.3: восстановлены — в Supabase-эпохе жили вне репозитория;
+-- без них CREATE POLICY ... USING((SELECT is_admin())) падал, RLS-политики не создавались)
+-- Источник прав — request.jwt.claims (выставляет API, database.service.ts):
+--   sub = profiles.id, role = 'admin' | 'user'.
+-- user_access наполняет триггер sync_user_access из settings.users (active-менеджеры).
+-- Читаем клеймы напрямую (как шим auth.uid()) — политики в файле идут РАНЬШЕ шима.
+-- ============================================================
+CREATE OR REPLACE FUNCTION public.is_admin() RETURNS boolean
+LANGUAGE sql STABLE AS $$
+  SELECT COALESCE(current_setting('request.jwt.claims', true)::jsonb ->> 'role', '') = 'admin';
+$$;
+
+CREATE OR REPLACE FUNCTION public.is_active_employee() RETURNS boolean
+LANGUAGE sql STABLE AS $$
+  SELECT public.is_admin()
+    OR EXISTS (
+      SELECT 1 FROM public.user_access
+      WHERE user_id = COALESCE(current_setting('request.jwt.claims', true)::jsonb ->> 'sub', '')
+    );
+$$;
+
+-- Модели «прав на раздел» в БД нет: ограничения — только массивы user_access.
+-- Разрешение раздела = активный сотрудник; фильтры по типам/городам — через access_*.
+CREATE OR REPLACE FUNCTION public.has_section_permission(section text) RETURNS boolean
+LANGUAGE sql STABLE AS $$
+  SELECT public.is_active_employee();
+$$;
+
+CREATE OR REPLACE FUNCTION public.access_supplier_types() RETURNS text[]
+LANGUAGE sql STABLE AS $$
+  SELECT COALESCE((SELECT supplier_types FROM public.user_access
+    WHERE user_id = COALESCE(current_setting('request.jwt.claims', true)::jsonb ->> 'sub', '')), '{}');
+$$;
+CREATE OR REPLACE FUNCTION public.access_supplier_cities() RETURNS text[]
+LANGUAGE sql STABLE AS $$
+  SELECT COALESCE((SELECT supplier_cities FROM public.user_access
+    WHERE user_id = COALESCE(current_setting('request.jwt.claims', true)::jsonb ->> 'sub', '')), '{}');
+$$;
+CREATE OR REPLACE FUNCTION public.access_buyer_types() RETURNS text[]
+LANGUAGE sql STABLE AS $$
+  SELECT COALESCE((SELECT buyer_types FROM public.user_access
+    WHERE user_id = COALESCE(current_setting('request.jwt.claims', true)::jsonb ->> 'sub', '')), '{}');
+$$;
+CREATE OR REPLACE FUNCTION public.access_buyer_cities() RETURNS text[]
+LANGUAGE sql STABLE AS $$
+  SELECT COALESCE((SELECT buyer_cities FROM public.user_access
+    WHERE user_id = COALESCE(current_setting('request.jwt.claims', true)::jsonb ->> 'sub', '')), '{}');
+$$;
+
 CREATE OR REPLACE FUNCTION public.get_supplier_with_domain(p_token TEXT)
 RETURNS TABLE (payload JSONB) AS $$
   SELECT to_jsonb(s) || jsonb_build_object('domain', to_jsonb(d))
@@ -504,7 +575,6 @@ ON CONFLICT (id) DO NOTHING;
 
 -- ============================================================
 -- END
-& "C:\Program Files\PostgreSQL\18\bin\psql.exe" -U postgres -d erp -c "
 ALTER TABLE public.suppliers ADD COLUMN IF NOT EXISTS updated_by UUID;
 ALTER TABLE public.suppliers ADD COLUMN IF NOT EXISTS created_by_name TEXT;
 ALTER TABLE public.suppliers ADD COLUMN IF NOT EXISTS updated_by_name TEXT;
@@ -520,7 +590,7 @@ ALTER TABLE public.tickets ADD COLUMN IF NOT EXISTS updated_by_name TEXT;
 ALTER TABLE public.media_records ADD COLUMN IF NOT EXISTS updated_by UUID;
 ALTER TABLE public.media_records ADD COLUMN IF NOT EXISTS created_by_name TEXT;
 ALTER TABLE public.media_records ADD COLUMN IF NOT EXISTS updated_by_name TEXT;
-"
+
 -- ============================================================
 ALTER TABLE public.suppliers ADD COLUMN IF NOT EXISTS pin TEXT;
 
@@ -547,8 +617,8 @@ USING (
     (SELECT is_admin())
     OR (
       (SELECT has_section_permission('suppliers'))
-      AND (cardinality((SELECT access_supplier_types())) = 0 OR type = ANY((SELECT access_supplier_types())))
-      AND (cardinality((SELECT access_supplier_cities())) = 0 OR city = ANY((SELECT access_supplier_cities())))
+      AND (cardinality((SELECT access_supplier_types())) = 0 OR type = ANY(access_supplier_types()))
+      AND (cardinality((SELECT access_supplier_cities())) = 0 OR city = ANY(access_supplier_cities()))
     )
   )
 )
@@ -559,8 +629,8 @@ WITH CHECK (
     (SELECT is_admin())
     OR (
       (SELECT has_section_permission('suppliers'))
-      AND (cardinality((SELECT access_supplier_types())) = 0 OR type = ANY((SELECT access_supplier_types())))
-      AND (cardinality((SELECT access_supplier_cities())) = 0 OR city = ANY((SELECT access_supplier_cities())))
+      AND (cardinality((SELECT access_supplier_types())) = 0 OR type = ANY(access_supplier_types()))
+      AND (cardinality((SELECT access_supplier_cities())) = 0 OR city = ANY(access_supplier_cities()))
     )
   )
   AND (domain_id = (SELECT current_domain_id()) OR (SELECT is_admin()))
@@ -577,8 +647,8 @@ USING (
     (SELECT is_admin())
     OR (
       (SELECT has_section_permission('buyers'))
-      AND (cardinality((SELECT access_buyer_types())) = 0 OR type = ANY((SELECT access_buyer_types())))
-      AND (cardinality((SELECT access_buyer_cities())) = 0 OR city = ANY((SELECT access_buyer_cities())))
+      AND (cardinality((SELECT access_buyer_types())) = 0 OR type = ANY(access_buyer_types()))
+      AND (cardinality((SELECT access_buyer_cities())) = 0 OR city = ANY(access_buyer_cities()))
     )
   )
 )
@@ -589,8 +659,8 @@ WITH CHECK (
     (SELECT is_admin())
     OR (
       (SELECT has_section_permission('buyers'))
-      AND (cardinality((SELECT access_buyer_types())) = 0 OR type = ANY((SELECT access_buyer_types())))
-      AND (cardinality((SELECT access_buyer_cities())) = 0 OR city = ANY((SELECT access_buyer_cities())))
+      AND (cardinality((SELECT access_buyer_types())) = 0 OR type = ANY(access_buyer_types()))
+      AND (cardinality((SELECT access_buyer_cities())) = 0 OR city = ANY(access_buyer_cities()))
     )
   )
   AND (domain_id = (SELECT current_domain_id()) OR (SELECT is_admin()))
@@ -650,6 +720,16 @@ CREATE POLICY "Admin all outbox_events" ON public.outbox_events FOR ALL TO authe
 
 GRANT SELECT, INSERT, UPDATE ON public.integration_facts TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.outbox_events TO authenticated;
+
+-- ─── GRANTS прикладным ролям (v1.35.3) ───
+-- Раньше прав для app_user/app_admin в миграции не было вообще — приложение
+-- заводилось только после ручных GRANT (иначе permission denied, в т.ч. на
+-- схему commerce — ЛК читает commerce.domains напрямую).
+GRANT USAGE ON SCHEMA public TO app_user, app_admin;
+GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO app_user;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO app_admin;
+GRANT USAGE ON SCHEMA commerce TO app_user, app_admin;
+GRANT SELECT ON commerce.domains TO app_user, app_admin;
 
 -- ─── 0004_auth_compat.sql ───
 -- ═══════════════════════════════════════════════════════════════════════════
@@ -716,22 +796,21 @@ COMMENT ON COLUMN public.profiles.password_hash IS
 -- suppliers / buyers: дедуп по ИНН, email, мягкое удаление + списки по имени
 CREATE INDEX IF NOT EXISTS idx_suppliers_inn_active ON public.suppliers (inn) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_suppliers_email_active ON public.suppliers (lower(email)) WHERE deleted_at IS NULL;
-CREATE INDEX IF NOT EXISTS idx_suppliers_name ON public.suppliers (name);
+CREATE INDEX IF NOT EXISTS idx_suppliers_name ON public.suppliers (trade_name);
 CREATE INDEX IF NOT EXISTS idx_suppliers_responsible ON public.suppliers (responsible_id) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_buyers_inn_active ON public.buyers (inn) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_buyers_email_active ON public.buyers (lower(email)) WHERE deleted_at IS NULL;
-CREATE INDEX IF NOT EXISTS idx_buyers_name ON public.buyers (name);
+CREATE INDEX IF NOT EXISTS idx_buyers_name ON public.buyers (trade_name);
 CREATE INDEX IF NOT EXISTS idx_buyers_responsible ON public.buyers (responsible_id) WHERE deleted_at IS NULL;
 
 -- tasks: карточки сущностей (entity_id) и списки по статусу/дате
 CREATE INDEX IF NOT EXISTS idx_tasks_entity ON public.tasks (entity_type, entity_id) WHERE deleted_at IS NULL;
-CREATE INDEX IF NOT EXISTS idx_tasks_status_due ON public.tasks (status, due_date) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_tasks_status_due ON public.tasks (task_status, due_date) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_tasks_responsible ON public.tasks (responsible_id) WHERE deleted_at IS NULL;
 
 -- tickets: списки поддержки
 CREATE INDEX IF NOT EXISTS idx_tickets_status_created ON public.tickets (status, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_tickets_buyer ON public.tickets (buyer_id) WHERE deleted_at IS NULL;
-CREATE INDEX IF NOT EXISTS idx_tickets_supplier ON public.tickets (supplier_id) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_tickets_entity ON public.tickets (entity_type, entity_id) WHERE deleted_at IS NULL;
 
 -- media_records: размещения по поставщику
 CREATE INDEX IF NOT EXISTS idx_media_records_supplier ON public.media_records (supplier_id) WHERE deleted_at IS NULL;
@@ -761,6 +840,9 @@ ALTER TABLE public.suppliers ADD COLUMN IF NOT EXISTS cab_email text;
 ALTER TABLE public.suppliers ADD COLUMN IF NOT EXISTS service_search_conditions jsonb;
 -- fallback-хранилище PIN (приоритет — service_access.pin).
 ALTER TABLE public.suppliers ADD COLUMN IF NOT EXISTS pin TEXT;
+-- v1.35.3: ЛК ставит 'В работе' при сохранении условий проценки (lk.service.ts) —
+-- без колонки финальный UPDATE падал с 500.
+ALTER TABLE public.suppliers ADD COLUMN IF NOT EXISTS pricing_status TEXT;
 
 -- suppliers / buyers: домен-арендатор (модуль Доменов при удалении перепривязывает
 -- арендаторов на дефолтный домен — колонки отсутствовали в боевой схеме).
@@ -819,3 +901,13 @@ CREATE POLICY "Admin all outbox_events" ON public.outbox_events FOR ALL TO authe
   USING ((SELECT is_admin())) WITH CHECK ((SELECT is_admin()));
 GRANT SELECT, INSERT, UPDATE ON public.integration_facts TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.outbox_events TO authenticated;
+
+-- ─── GRANTS прикладным ролям (v1.35.3) ───
+-- Раньше прав для app_user/app_admin в миграции не было вообще — приложение
+-- заводилось только после ручных GRANT (иначе permission denied, в т.ч. на
+-- схему commerce — ЛК читает commerce.domains напрямую).
+GRANT USAGE ON SCHEMA public TO app_user, app_admin;
+GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO app_user;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO app_admin;
+GRANT USAGE ON SCHEMA commerce TO app_user, app_admin;
+GRANT SELECT ON commerce.domains TO app_user, app_admin;
