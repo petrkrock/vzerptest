@@ -301,9 +301,14 @@ export class LkService {
     patch.warehouse_count = (patch.warehouse_locations as unknown[])?.length ?? (supplier.warehouse_locations || []).length;
     patch.updated_at = new Date().toISOString();
 
-    const sets = Object.keys(patch).map((k, i) => `${k} = $${i + 1}`).join(', ');
+    // jsonb-колонки — только строки с явным кастом: JS-массив/объект node-pg
+    // сериализует как Postgres-array '{...}' → падение "invalid input syntax for type json".
+    const JSONB = new Set(['warehouse_locations', 'service_search', 'history', 'contacts', 'service_access', 'lk_news']);
+    const keys = Object.keys(patch);
+    const sets = keys.map((k, i) => `${k} = $${i + 1}${JSONB.has(k) ? '::jsonb' : ''}`).join(', ');
+    const vals = keys.map(k => JSONB.has(k) ? JSON.stringify(patch[k] ?? null) : patch[k]);
     await this.db.withAdmin(c =>
-      c.query(`UPDATE public.suppliers SET ${sets} WHERE id = $${Object.keys(patch).length + 1}`, [...Object.values(patch), supplier.id]),
+      c.query(`UPDATE public.suppliers SET ${sets} WHERE id = $${keys.length + 1}`, [...vals, supplier.id]),
     );
 
     // ТЗ v1.23.39: контакты/ИНН в POST-ответ — иначе ЛК терял их после сохранения.
@@ -340,7 +345,12 @@ export class LkService {
       phone: supplier.phone || '',
       myNews,
       placements,
-      lkDomain: domain?.host || '',
+      // v1.35.3-fix3: фронт читает d.lkDomain.title — отдаём объект домена.
+      lkDomain: domain ? {
+        host: String(domain.host || ''),
+        title: String(domain.title || ''),
+        greeting: String(domain.greeting || ''),
+      } : null,
       cabinetTitle: String(settings.cabinetTitle || ''),
       services: settings.lkServices || [],
       mediaContract: resolved ? {
@@ -349,7 +359,15 @@ export class LkService {
         status: resolved.status,
       } : null,
       adFormats: settings.mediaAdTypes || [],
-      offer: offer.lkOffer,
+      // v1.35.3-fix3: фронт читает offer как объект {edition, name, text} —
+      // отдаём оферту целиком (текст — в text, как в эталоне).
+      offer: {
+        name: String(offer.name || ''),
+        edition: String(offer.edition || ''),
+        lkTitle: String(offer.lkTitle || ''),
+        lkGreeting: String(offer.lkGreeting || ''),
+        text: String(offer.text || offer.lkOffer || ''),
+      },
       offerAcceptedEdition: String(sa.offerAcceptedEdition || ''),
       lkOperator: String(settings.lkOperator || ''),
       cabinet: {
@@ -361,8 +379,16 @@ export class LkService {
       companyName: supplier.trade_name || supplier.name || '',
       inn: supplier.inn || '',
       contactName: supplier.contact_name || '',
+      contactRole: supplier.contact_role || '',
       contactPhone: supplier.phone || '',
       contactEmail: supplier.email || '',
+      // v1.35.3-fix3: поля для блоков «О компании» (О поставщике/Ассортимент/Представитель).
+      type: supplier.type || '',
+      website: supplier.website || '',
+      city: supplier.city || '',
+      productGroups: supplier.product_groups || [],
+      ownBrands: supplier.own_brands || [],
+      supplierServices: supplier.services || [],
       multiWarehouse: await this.readMultiwarehouse(supplier.id),
       warehouses: supplier.warehouse_locations || [],
       serviceSearch: supplier.service_search || [],
@@ -383,6 +409,10 @@ export class LkService {
     const skuTotal = wh.reduce((a: number, r: Record<string, unknown>) =>
       a + ((r.warehouse_locations as Array<Record<string, unknown>>) || []).reduce((x: number, w) => x + (Number(w.skuCount) || 0), 0), 0);
     return {
+      banner: (dset.lkBanner as Record<string, unknown>) || { image: '', link: '' },
+      lkLinks: (dset.lkLinks as Record<string, unknown>) || {},
+      publishedNews: ((dset.marketNews as Array<Record<string, unknown>>) || [])
+        .filter(n => n.status === 'Опубликовано').slice(0, 20),
       counters: (dset.lkDashboard as Record<string, unknown>) || { countersMode: 'manual', buyersCount: 500, suppliersCount: 500, skuCount: 350000 },
       dbBuyers: dbB[0]?.n ?? 0,
       dbSuppliers: dbS[0]?.n ?? 0,
@@ -469,10 +499,12 @@ export class LkService {
     const so = ((settings.supplier_offer as Array<Record<string, unknown>>) || [])[0];
     const base = so || {};
     return {
+      name: String(c0?.name ?? base.name ?? ''),
       edition: String(c0?.edition ?? base.edition ?? ''),
       lkTitle: String(c0?.lkTitle ?? base.lkTitle ?? ''),
       lkGreeting: String(c0?.lkGreeting ?? base.lkGreeting ?? ''),
       lkOffer: String(c0?.lkOffer ?? base.text ?? base.lkOffer ?? ''),
+      text: String(c0?.lkOffer ?? base.text ?? base.lkOffer ?? ''),
       acceptedEdition: String(c0?.acceptedEdition ?? base.acceptedEdition ?? ''),
     };
   }
