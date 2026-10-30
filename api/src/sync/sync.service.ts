@@ -85,6 +85,24 @@ function paramExpr(col: string, idx: number, arrayCols: Set<string>): string {
 export class SyncService {
   constructor(private db: DatabaseService) {}
 
+  // v1.35.3-fix5: реальные колонки таблиц (information_schema, кеш на процесс).
+  // UPDATE/INSERT собираются по ключам данных фронта — если в БД нет хоть одной
+  // колонки из пакета, вся запись молча не сохранялась (ссылка ЛК, PIN и пр.).
+  // Теперь отсутствующие колонки пропускаются и пишутся в errors как инфо-запись.
+  private tableColsCache = new Map<string, Set<string>>();
+  private async tableCols(c: { query: (t: string, p?: unknown[]) => Promise<{ rows: Array<{ column_name: string }> }> }, table: string): Promise<Set<string>> {
+    const hit = this.tableColsCache.get(table);
+    if (hit) return hit;
+    const [schema, name] = table.split('.');
+    const { rows } = await c.query(
+      `SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2`,
+      [schema, name],
+    );
+    const cols = new Set(rows.map(r => r.column_name));
+    this.tableColsCache.set(table, cols);
+    return cols;
+  }
+
   async snapshot(user: RequestUser) {
     return this.db.withClaims(user, async c => {
       const { rows: s } = await c.query(
@@ -138,6 +156,18 @@ export class SyncService {
             op = this.validateOp(raw);
           const table = ENTITY_TABLE[op.entity];
           const arrayCols = ARRAY_COLUMNS[table] ?? new Set<string>();
+          // v1.35.3-fix5: сверяемся с РЕАЛЬНОЙ схемой БД. Колонки, которых в таблице
+          // нет (дрейф схемы между миграциями), пропускаем — иначе падал весь
+          // INSERT/UPDATE и запись не сохранялась (ссылка ЛК, PIN «слетали»).
+          const realCols = await this.tableCols(c, table);
+          const skippedCols: string[] = [];
+          const knownFields = (entries: Array<[string, unknown]>) =>
+            entries.filter(([k]) => {
+              if (SYSTEM_COLS.has(k)) return false;
+              if (realCols.has(k)) return true;
+              skippedCols.push(k);
+              return false;
+            });
 
           if (op.op === 'create') {
             const data = { ...(op.data || {}) };
@@ -154,7 +184,11 @@ export class SyncService {
               }
             }
 
-            const fields = snakize(data).filter(([k]) => !SYSTEM_COLS.has(k));
+            const fields = knownFields(snakize(data));
+            if (skippedCols.length) {
+              errors.push({ entity: op.entity, op: op.op, id: op.id,
+                error: `Пропущены отсутствующие в БД колонки: ${skippedCols.join(', ')}` });
+            }
             const cols = ['id', ...(DOMAIN_TABLES.has(table) ? ['domain_id'] : []), ...fields.map(([k]) => k)];
             const placeholders: string[] = ['$1'];
             const vals: unknown[] = [op.id];
@@ -180,7 +214,12 @@ export class SyncService {
               vals,
             );
           } else if (op.op === 'update') {
-            const fields = snakize(op.data || {}).filter(([k]) => !SYSTEM_COLS.has(k));
+            const fields = knownFields(snakize(op.data || {}));
+            if (skippedCols.length) {
+              // Инфо-запись в журнал CRM: какие колонки пропущены (схема БД старше кода).
+              errors.push({ entity: op.entity, op: op.op, id: op.id,
+                error: `Пропущены отсутствующие в БД колонки: ${skippedCols.join(', ')}` });
+            }
             if (!fields.length) {
               applied++;
               continue;
