@@ -207,7 +207,9 @@ export class LkService {
       const item = (body.marketNewsRequest || {}) as Record<string, unknown>;
       const title = String(item.title || '').trim();
       if (!title) throw new BadRequestException('Введите заголовок новости');
-      const now2 = new Date().toISOString();
+      // v1.35.3-fix7: только YYYY-MM-DD — фронт форматирует дату как
+      // split('-').reverse().join('.'); полный ISO давал мусор «30T13:34:….10.2026».
+      const now2 = new Date().toISOString().slice(0, 10);
       const news = ((settings.marketNews || []) as Array<Record<string, unknown>>).slice(0, 3);
       const entry: Record<string, unknown> = {
         id: `mn-${Date.now()}`,
@@ -218,8 +220,8 @@ export class LkService {
         text: String(item.text || '').trim(),
         imageUrl: String(item.imageUrl || '').trim(),
         status: 'Новая',
-        date: String(item.date || now2),
-        createdAt: now2,
+        date: String(item.date || now2).slice(0, 10),
+        createdAt: new Date().toISOString(),
       };
       await this.saveSettings({ ...settings, marketNews: [entry, ...news] });
       return { ok: true };
@@ -448,10 +450,12 @@ export class LkService {
       lkLinks: (dset.lkLinks as Record<string, unknown>) || {},
       // v1.35.3-fix6: «Новости платформы»/«Новости рынка» читаются фронтом из
       // dashboard.news / dashboard.vendorNews (зеркало эталона) — без них блоки пустые.
+      // v1.35.3-fix7: slice(-3)/slice(-8) — как в эталоне: новые новости добавляются
+      // в конец массива, фронту нужны ПОСЛЕДНИЕ (раньше отдавали самые старые).
       news: ((dset.lkNews as Array<Record<string, unknown>>) || [])
-        .filter(n => n.published !== false).slice(0, 3).reverse(),
+        .filter(n => n.published !== false).slice(-3).reverse(),
       vendorNews: ((dset.lkVendorNews as Array<Record<string, unknown>>) || [])
-        .filter(n => n.published !== false).slice(0, 8).reverse(),
+        .filter(n => n.published !== false).slice(-8).reverse(),
       publishedNews: ((dset.marketNews as Array<Record<string, unknown>>) || [])
         .filter(n => n.status === 'Опубликовано').slice(0, 20),
       counters: (dset.lkDashboard as Record<string, unknown>) || { countersMode: 'manual', buyersCount: 500, suppliersCount: 500, skuCount: 350000 },
@@ -508,11 +512,13 @@ export class LkService {
   }
 
   private async readPlacements(supplierId: string) {
+    // v1.35.3-fix7: без фильтра по статусу (зеркало эталона) — иначе новые заявки
+    // со статусом «Заявка создана» не появлялись в «Рекламных размещениях».
     const { rows } = await this.db.withAdmin(c =>
       c.query(
         `SELECT ad_type_id, ad_type_name, duration_label, start_date, status FROM public.media_records
-         WHERE supplier_id = $1 AND status IN ('Активный','Завершено')
-         ORDER BY created_at DESC LIMIT 20`,
+         WHERE supplier_id = $1
+         ORDER BY created_at DESC LIMIT 50`,
         [supplierId],
       ),
     );
