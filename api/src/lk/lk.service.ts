@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException, NotFoundException, Injectable } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { DatabaseService } from '../database/database.service';
 import {
   TOKEN_RE, pinOk, validateWarehouses, validateConditions, withStatuses,
@@ -169,8 +170,9 @@ export class LkService {
       const total = pricePerMonth * months;
       const totalPrice = discount > 0 ? Math.round(total * (1 - discount / 100)) : total;
       const supplierName = supplier.trade_name || supplier.name || '';
+      // media_records.id — uuid: строковый mr-... не проходил (invalid input syntax for type uuid).
       const rec = {
-        id: `mr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        id: randomUUID(),
         supplier_id: supplier.id,
         supplier_name: supplierName,
         ad_type_id: String(adt.id || ''),
@@ -444,6 +446,12 @@ export class LkService {
     return {
       banner: (dset.lkBanner as Record<string, unknown>) || { image: '', link: '' },
       lkLinks: (dset.lkLinks as Record<string, unknown>) || {},
+      // v1.35.3-fix6: «Новости платформы»/«Новости рынка» читаются фронтом из
+      // dashboard.news / dashboard.vendorNews (зеркало эталона) — без них блоки пустые.
+      news: ((dset.lkNews as Array<Record<string, unknown>>) || [])
+        .filter(n => n.published !== false).slice(0, 3).reverse(),
+      vendorNews: ((dset.lkVendorNews as Array<Record<string, unknown>>) || [])
+        .filter(n => n.published !== false).slice(0, 8).reverse(),
       publishedNews: ((dset.marketNews as Array<Record<string, unknown>>) || [])
         .filter(n => n.status === 'Опубликовано').slice(0, 20),
       counters: (dset.lkDashboard as Record<string, unknown>) || { countersMode: 'manual', buyersCount: 500, suppliersCount: 500, skuCount: 350000 },

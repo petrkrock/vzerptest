@@ -14,6 +14,9 @@ const MIME: Record<string, string> = {
 export class FilesController {
   constructor(private files: FilesService) {}
 
+  // v1.35.3-fix6: upload — публичный, как GET: ЛК поставщика шлёт файлы
+  // без CRM-токена (в 1.31.18 — Supabase Storage с anon-key, авторизация по токену ЛК).
+  @Public()
   @Post()
   upload(@Body() body: { base64?: string; name?: string }) {
     if (!body?.base64) throw new BadRequestException('Нет файла');

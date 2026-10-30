@@ -8,8 +8,10 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    // v1.32.4: лимит тела 512 КБ — как в edge function (ЛК присылает склады/проценку).
-    new FastifyAdapter({ bodyLimit: 512 * 1024 }),
+    // v1.32.4: лимит тела (ЛК присылает склады/проценку).
+    // v1.35.3-fix6: 15 МБ — upload файлов ЛК идёт base64 через /files,
+    // 512 КБ не хватало (FastifyError: Request body is too large).
+    new FastifyAdapter({ bodyLimit: 15 * 1024 * 1024 }),
   );
 
   // v1.34.1: один вызов enableCors. Раньше было три register(cors) с prefix —
