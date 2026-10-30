@@ -1300,7 +1300,10 @@ export default function SupplierServicePage() {
                     {whs.length ? (
                       <div className="space-y-2">
                         {whs.map((w, i) => {
-                          const st = (w.status as string) || 'Новый';
+                          // v1.35.3-fix7: статусы складов — только Новый/Проверен/Заморожен
+                          // (легаси-значения в данных, напр. «В работе», показываем как «Новый»).
+                          const rawSt = (w.status as string) || '';
+                          const st = ['Новый', 'Проверен', 'Заморожен'].includes(rawSt) ? rawSt : 'Новый';
                           const stCls = st === 'Проверен' ? 'bg-green-100 text-green-700'
                             : st === 'Заморожен' ? 'bg-gray-100 text-gray-500'
                             : 'bg-blue-100 text-blue-700';
