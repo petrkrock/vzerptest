@@ -29,6 +29,7 @@ import { getCurrentUser, reconcileSession, canAccess, canSeeSupplier, canSeeBuye
 import { getStore } from '@/lib/store';
 import type { AppUser } from '@/types';
 import { initRemoteSync } from '@/lib/store';
+import { startCrmRealtime } from '@/lib/realtime';
 
 /** Первый доступный менеджеру раздел — куда редиректить при отказе в доступе (без петель). */
 function firstAllowedPath(): string {
@@ -107,6 +108,7 @@ function useBootstrap() {
         // 401 = не залогинен → пускаем на /login, стор остаётся пустым.
         console.warn('[bootstrap] initRemoteSync:', err);
       }
+      if (!cancelled && localStorage.getItem('vz_api_token')) startCrmRealtime();
       if (cancelled) return;
       setReady(true);
     })();

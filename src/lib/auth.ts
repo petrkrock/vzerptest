@@ -3,6 +3,7 @@ import { EMPTY_ACCESS } from '@/types';
 import { getStore, updateStore, initRemoteSync, clearLocalStoreCache } from './store';
 // v1.34.0: Supabase вырезан — вход только через свой API (POST /auth/login → JWT).
 import { apiLogin, setApiToken } from './api';
+import { startCrmRealtime, stopCrmRealtime } from './realtime';
 
 const SESSION_KEY = 'vz_crm_session';
 
@@ -59,6 +60,7 @@ export async function login(email: string, password: string): Promise<AppUser | 
     return null;
   }
   await initRemoteSync();
+  startCrmRealtime();
   const store = getStore();
   const profile = store.settings.users.find(
     u => u.email.toLowerCase() === email.toLowerCase() && u.status === 'active',
@@ -69,6 +71,7 @@ export async function login(email: string, password: string): Promise<AppUser | 
 }
 
 export function logout() {
+  stopCrmRealtime();
   localStorage.removeItem(SESSION_KEY);
   clearLocalStoreCache();
   setApiToken(null);

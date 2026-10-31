@@ -87,6 +87,7 @@ export default function SupplierServicePage() {
   const [matBusy, setMatBusy] = useState(false);
   const [showStatusInfo, setShowStatusInfo] = useState(false); // v1.30.84: справка по статусам в шапке блока
   const [newsEditId, setNewsEditId] = useState<string | null>(null); // v1.30.86: просмотр/редактирование новости из ЛК
+  const lkSyncVersionRef = useRef(0); // v1.35.4: курсор событийной синхронизации ЛК
 
   // v1.30.81: расшифровки статусов размещений (иконка-? в строке)
   // v1.30.86: короткие формулировки + карта цветов статусов
@@ -156,7 +157,7 @@ export default function SupplierServicePage() {
     if (!true || !/^[a-f0-9]{32}$/.test(token)) { setLoading(false); setFatal('Недействительная ссылка'); return; }
     fetch(`${API_URL}/lk?token=${token}`, { headers: {'Content-Type': 'application/json'} })
       .then(r => r.json())
-      .then(d => { if (d.error) setFatal(d.error); else { setData(prev => prev ? {
+      .then(d => { if (d.error) setFatal(d.error); else { if (typeof d?.syncVersion === 'number') lkSyncVersionRef.current = d.syncVersion; setData(prev => prev ? {
         ...prev,
         // ТЗ v1.23.52: мерджим ТОЛЬКО скаляры — GET-метаданные содержат пустые массивы,
         // которые затирали загруженные условия/склады после F5.
@@ -195,12 +196,66 @@ export default function SupplierServicePage() {
     });
   }, [data, pinPassed]);
 
-  // ТЗ v1.23.35: автообновление данных из CRM каждые 20 сек — изменения менеджера видны без ручного F5
+  // v1.35.4: realtime SSE вместо polling — ERP → ЛК без F5.
   useEffect(() => {
-    if (!pinPassed) return;
-    const t = setInterval(() => { post({}, true).catch(() => {}); }, 45000);
-    return () => clearInterval(t);
-  }, [pinPassed]);
+    if (!pinPassed || !token) return;
+    let active = true;
+    let source: EventSource | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+    let reconnectAttempt = 0;
+
+    const reconnectDelay = () => {
+      const base = Math.min(1000 * 2 ** reconnectAttempt, 30000);
+      reconnectAttempt += 1;
+      return Math.round(base * (1 + Math.random()));
+    };
+
+    const refresh = () => {
+      if (refreshTimer) clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => {
+        refreshTimer = null;
+        void post({}, true).catch(() => {});
+      }, 100);
+    };
+
+    const connect = async () => {
+      if (!active) return;
+      try {
+        const r = await fetch(`${API_URL}/lk/stream-ticket`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token }),
+        });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok || !d.ticket) throw new Error('ticket');
+        source = new EventSource(`${API_URL}/lk/stream?ticket=${encodeURIComponent(d.ticket)}&last_id=${lkSyncVersionRef.current}`);
+        source.onopen = () => { reconnectAttempt = 0; };
+        source.onmessage = (event) => {
+          if (event.lastEventId) {
+            const version = Number(event.lastEventId);
+            if (!Number.isNaN(version)) lkSyncVersionRef.current = version;
+          }
+          refresh();
+        };
+        source.onerror = () => {
+          source?.close();
+          source = null;
+          if (active) reconnectTimer = setTimeout(() => void connect(), reconnectDelay());
+        };
+      } catch {
+        if (active) reconnectTimer = setTimeout(() => void connect(), reconnectDelay());
+      }
+    };
+
+    void connect();
+    return () => {
+      active = false;
+      source?.close();
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (refreshTimer) clearTimeout(refreshTimer);
+    };
+  }, [pinPassed, token]);
 
   useEffect(() => {
     const el = wrapperRef.current;
@@ -407,6 +462,7 @@ export default function SupplierServicePage() {
         body: JSON.stringify({ token, pin, ...payload }),
       });
       const d = await res.json();
+      if (typeof d?.syncVersion === 'number') lkSyncVersionRef.current = d.syncVersion;
       if (!res.ok || d.error) return d.error || 'Ошибка сохранения';
       // ТЗ v1.23.41: дедупликация — одинаковые данные не вызывают перерисовку (ЛК тормозил)
       const key = JSON.stringify([d.warehouses, d.serviceSearch, d.contactName, d.contactPhone, d.contactEmail, d.multiWarehouse, d.availableCities]);

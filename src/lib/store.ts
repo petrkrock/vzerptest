@@ -595,7 +595,16 @@ export function useStoreVersion(): number {
 }
 
 let syncTimer: ReturnType<typeof setTimeout> | null = null;
-const SYNC_DEBOUNCE_MS = 1500;
+const SYNC_DEBOUNCE_MS = 250;
+let lastSyncVersion = 0;
+
+export function getLastSyncVersion(): number {
+  return lastSyncVersion;
+}
+
+export function setLastSyncVersion(version: number): void {
+  lastSyncVersion = version;
+}
 
 type EntityName = 'suppliers' | 'buyers' | 'tasks' | 'tickets' | 'mediaRecords';
 
@@ -702,6 +711,28 @@ async function pushRemoteDiff(previous: CRMStore, current: CRMStore): Promise<vo
   }
 }
 
+const CRITICAL_SUPPLIER_SYNC_KEYS = new Set([
+  'status', 'serviceAccess', 'warehouseLocations', 'serviceSearch',
+  'serviceSearchConditions', 'edoOperator', 'edoToken', 'priceEmail', 'multiWarehouse',
+]);
+
+function hasCriticalSyncChange(previous: CRMStore, current: CRMStore): boolean {
+  if (JSON.stringify(previous.settings) !== JSON.stringify(current.settings)) return true;
+  if (stableEntityJson(previous.mediaRecords) !== stableEntityJson(current.mediaRecords)) return true;
+  if (previous.suppliers.length !== current.suppliers.length) return true;
+  const prevById = new Map(previous.suppliers.map(s => [s.id, s]));
+  for (const next of current.suppliers) {
+    const prev = prevById.get(next.id);
+    if (!prev) return true;
+    if (stableEntityJson(prev) === stableEntityJson(next)) continue;
+    for (const key of CRITICAL_SUPPLIER_SYNC_KEYS) {
+      if (JSON.stringify((prev as unknown as Record<string, unknown>)[key]) !==
+          JSON.stringify((next as unknown as Record<string, unknown>)[key])) return true;
+    }
+  }
+  return false;
+}
+
 let pendingSyncPrevious: CRMStore | null = null;
 let pendingSyncCurrent: CRMStore | null = null;
 function scheduleRemoteSync(previous: CRMStore, current: CRMStore) {
@@ -709,6 +740,14 @@ function scheduleRemoteSync(previous: CRMStore, current: CRMStore) {
   if (!pendingSyncPrevious) pendingSyncPrevious = previous;
   pendingSyncCurrent = current;
   if (syncTimer) clearTimeout(syncTimer);
+  const prev = pendingSyncPrevious;
+  const next = pendingSyncCurrent;
+  if (prev && next && hasCriticalSyncChange(prev, next)) {
+    pendingSyncPrevious = null;
+    pendingSyncCurrent = null;
+    void pushRemoteDiff(prev, next);
+    return;
+  }
   syncTimer = setTimeout(() => {
     syncTimer = null;
     const prev = pendingSyncPrevious;
@@ -742,6 +781,7 @@ export async function initRemoteSync(): Promise<void> {
     console.warn('[store] pull не удался — локальные данные сохранены, синхронизация отложена.');
     return;
   }
+  setLastSyncVersion(remote.syncVersion || 0);
 
   let localRaw: CRMStore | null = null;
   try {
