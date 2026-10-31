@@ -36,11 +36,11 @@ export class SyncController {
 
   @Public()
   @Get('stream')
-  stream(
+  async stream(
     @Query('ticket') ticket: string,
     @Query('last_id') lastId: string,
     @Res() reply: FastifyReply,
   ) {
-    this.sse.connectCrm(ticket, Number(lastId) || 0, reply.raw);
+    await this.sse.connectCrm(ticket, Number(lastId) || 0, reply.raw);
   }
 }

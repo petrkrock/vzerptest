@@ -23,3 +23,10 @@ CREATE TABLE IF NOT EXISTS sse_tickets (
 );
 
 CREATE INDEX IF NOT EXISTS sse_tickets_expires_at_idx ON sse_tickets (expires_at) WHERE used_at IS NULL;
+
+-- Права API-ролям: таблицы созданы после baseline-GRANT, без этого будет permission denied.
+GRANT SELECT, INSERT, UPDATE ON public.sync_events TO app_user;
+GRANT SELECT, INSERT, UPDATE ON public.sse_tickets TO app_user;
+GRANT ALL ON public.sync_events TO app_admin;
+GRANT ALL ON public.sse_tickets TO app_admin;
+GRANT USAGE, SELECT ON SEQUENCE public.sync_events_id_seq TO app_user, app_admin;
