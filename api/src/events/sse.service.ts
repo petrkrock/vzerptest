@@ -7,7 +7,7 @@ interface SseClient {
   domainId: string;
   supplierId: string | null;
   res: any;
-  lastId: number;
+  lastId: string;
   addedAt: number;
 }
 
@@ -31,16 +31,7 @@ export class SseService implements OnModuleDestroy {
     this.clients.clear();
   }
 
-  stats() {
-    const keys = new Map<string, number>();
-    for (const c of this.clients.values()) {
-      const key = `${c.domainId}:${c.supplierId ?? 'crm'}`;
-      keys.set(key, (keys.get(key) ?? 0) + 1);
-    }
-    return { clients: this.clients.size, keys: Object.fromEntries(keys) };
-  }
-
-  async connectCrm(ticketId: string, lastId: number, res: any, origin?: string) {
+  async connectCrm(ticketId: string, lastId: string, res: any, origin?: string) {
     const t = await this.ticket.consume(ticketId);
     if (!t || t.supplier_id !== null) {
       this.writeHead(res, 403, origin).end();
@@ -49,7 +40,7 @@ export class SseService implements OnModuleDestroy {
     await this.setupStream({ domainId: t.domain_id, supplierId: null, lastId, res, origin });
   }
 
-  async connectLk(ticketId: string, lastId: number, res: any, origin?: string) {
+  async connectLk(ticketId: string, lastId: string, res: any, origin?: string) {
     const t = await this.ticket.consume(ticketId);
     if (!t || t.supplier_id === null) {
       this.writeHead(res, 403, origin).end();
@@ -58,7 +49,7 @@ export class SseService implements OnModuleDestroy {
     await this.setupStream({ domainId: t.domain_id, supplierId: t.supplier_id, lastId, res, origin });
   }
 
-  onEvent(row: { id: number; domain_id: string; supplier_id: string | null; entity: string; op: string; entity_id: string | null }) {
+  onEvent(row: { id: string; domain_id: string; supplier_id: string | null; entity: string; op: string; entity_id: string | null }) {
     for (const client of this.clients.values()) {
       if (client.domainId !== row.domain_id) continue;
       if (client.supplierId) {
@@ -69,7 +60,7 @@ export class SseService implements OnModuleDestroy {
     }
   }
 
-  private async setupStream(opts: { domainId: string; supplierId: string | null; lastId: number; res: any; origin?: string }) {
+  private async setupStream(opts: { domainId: string; supplierId: string | null; lastId: string; res: any; origin?: string }) {
     const id = `${++this.seq}`;
     const client: SseClient = { id, domainId: opts.domainId, supplierId: opts.supplierId, res: opts.res, lastId: opts.lastId, addedAt: Date.now() };
     const key = `${opts.domainId}:${opts.supplierId ?? 'crm'}`;
@@ -85,7 +76,7 @@ export class SseService implements OnModuleDestroy {
       'Connection': 'keep-alive',
       'X-Accel-Buffering': 'no',
     });
-    if (client.lastId > 0) {
+    if (BigInt(client.lastId || '0') > 0n) {
       await this.sendBacklog(client);
     }
     opts.res.on('close', () => this.removeClient(id));
@@ -102,34 +93,37 @@ export class SseService implements OnModuleDestroy {
   }
 
   private async sendBacklog(client: SseClient) {
-    const rows = await this.db.withAdmin(async c => {
-      if (client.supplierId) {
-        return (await c.query(
-          `SELECT id, entity, op, entity_id FROM sync_events
-           WHERE domain_id = $1 AND (supplier_id = $2 OR (supplier_id IS NULL AND entity = ANY($3)))
-             AND id > $4
-           ORDER BY id ASC LIMIT 500`,
-          [client.domainId, client.supplierId, ['suppliers', 'settings', 'mediaRecords'], client.lastId],
-        )).rows;
-      }
-      return (await c.query(
-        `SELECT id, entity, op, entity_id FROM sync_events
-         WHERE domain_id = $1 AND id > $2
-         ORDER BY id ASC LIMIT 500`,
-        [client.domainId, client.lastId],
-      )).rows;
-    });
+    const lastId = BigInt(client.lastId || '0');
+    const rows = lastId > 0n
+      ? await this.db.withAdmin(async c => {
+          if (client.supplierId) {
+            return (await c.query(
+              `SELECT id, entity, op, entity_id FROM sync_events
+               WHERE domain_id = $1 AND (supplier_id = $2 OR (supplier_id IS NULL AND entity = ANY($3)))
+                 AND id > $4::bigint
+               ORDER BY id ASC LIMIT 500`,
+              [client.domainId, client.supplierId, ['suppliers', 'settings', 'mediaRecords'], lastId.toString()],
+            )).rows;
+          }
+          return (await c.query(
+            `SELECT id, entity, op, entity_id FROM sync_events
+             WHERE domain_id = $1 AND id > $2::bigint
+             ORDER BY id ASC LIMIT 500`,
+            [client.domainId, lastId.toString()],
+          )).rows;
+        })
+      : [];
     const minRows = await this.db.withAdmin(c =>
-      c.query(`SELECT MIN(id)::bigint AS min_id FROM sync_events`),
+      c.query(`SELECT MIN(id)::text AS min_id FROM sync_events`),
     );
-    const minId = minRows.rows[0]?.min_id == null ? null : Number(minRows.rows[0].min_id);
-    if (client.lastId > 0 && (minId === null || minId > client.lastId + 1)) {
+    const minId = minRows.rows[0]?.min_id == null ? null : BigInt(String(minRows.rows[0].min_id));
+    if (lastId > 0n && (minId === null || minId > lastId + 1n)) {
       this.write(client, 'message', JSON.stringify({ type: 'resync_required' }));
       return;
     }
     if (rows.length) {
-      const firstId = rows[0].id as number;
-      if (firstId > client.lastId + 1) {
+      const firstId = BigInt(rows[0].id as string);
+      if (firstId > lastId + 1n) {
         this.write(client, 'message', JSON.stringify({ type: 'resync_required' }));
         return;
       }

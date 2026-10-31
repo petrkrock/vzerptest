@@ -345,15 +345,15 @@ export class LkService {
     };
   }
 
-  private async getSyncVersion(supplier: SupplierRow): Promise<number> {
-    if (!supplier.domain_id) return 0;
+  private async getSyncVersion(supplier: SupplierRow): Promise<string> {
+    if (!supplier.domain_id) return '0';
     const { rows } = await this.db.withAdmin(c =>
       c.query(
-        `SELECT COALESCE(MAX(id), 0)::int AS v FROM sync_events WHERE domain_id = $1 AND (supplier_id = $2 OR supplier_id IS NULL)`,
+        `SELECT COALESCE(MAX(id), 0)::text AS v FROM sync_events WHERE domain_id = $1 AND (supplier_id = $2 OR supplier_id IS NULL)`,
         [supplier.domain_id, supplier.id],
       ),
     );
-    return rows[0]?.v ?? 0;
+    return String(rows[0]?.v ?? '0');
   }
 
   private async emitLkEvent(

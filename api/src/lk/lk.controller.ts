@@ -44,6 +44,6 @@ export class LkController {
     @Res() reply: FastifyReply,
   ) {
     const origin = typeof req?.headers?.origin === 'string' ? req.headers.origin : undefined;
-    await this.sse.connectLk(ticket, Number(lastId) || 0, reply.raw, origin);
+    await this.sse.connectLk(ticket, lastId || '0', reply.raw, origin);
   }
 }

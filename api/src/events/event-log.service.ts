@@ -11,14 +11,15 @@ export interface SyncEventPayload {
 
 @Injectable()
 export class EventLogService {
-  async record(client: PoolClient, evt: SyncEventPayload): Promise<number> {
+  async record(client: PoolClient, evt: SyncEventPayload): Promise<bigint> {
     const { rows } = await client.query(
       `INSERT INTO sync_events (domain_id, supplier_id, entity, op, entity_id)
        VALUES ($1, $2, $3, $4, $5) RETURNING id`,
       [evt.domain_id, evt.supplier_id ?? null, evt.entity, evt.op, evt.entity_id ?? null],
     );
-    const id = rows[0].id as number;
-    await client.query(`SELECT pg_notify('sync_events', $1)`, [JSON.stringify({ id })]);
+    // pg возвращает bigint как string. В NOTIFY кладём строку: JSON.stringify не умеет BigInt.
+    const id = BigInt(rows[0].id as string);
+    await client.query(`SELECT pg_notify('sync_events', $1)`, [JSON.stringify({ id: id.toString() })]);
     return id;
   }
 }

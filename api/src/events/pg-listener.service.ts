@@ -6,8 +6,7 @@ import { DatabaseService } from '../database/database.service';
 @Injectable()
 export class PgListenerService implements OnModuleInit, OnModuleDestroy {
   private listener: Client;
-  private lastId = 0;
-  private connected = false;
+  private lastId = 0n;
   private cleanupTimer: NodeJS.Timeout | null = null;
 
   constructor(private sse: SseService, private db: DatabaseService) {
@@ -15,7 +14,8 @@ export class PgListenerService implements OnModuleInit, OnModuleDestroy {
     this.listener.on('notification', (msg) => {
       if (msg.channel !== 'sync_events' || !msg.payload) return;
       try {
-        const { id } = JSON.parse(msg.payload) as { id: number };
+        const payload = JSON.parse(msg.payload) as { id?: string };
+        const id = BigInt(payload.id || '0');
         if (id <= this.lastId) return;
         void this.readAndEmit(id);
       } catch { /* ignore malformed */ }
@@ -24,31 +24,26 @@ export class PgListenerService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleInit() {
     await this.listener.connect();
+    // Важно: сначала LISTEN, потом catch-up. Дедупликация ниже отсекает события, пришедшие дважды.
     await this.listener.query('LISTEN sync_events');
-    this.connected = true;
     this.cleanupTimer = setInterval(() => void this.cleanup(), 3600000);
     this.cleanupTimer.unref?.();
     void this.cleanup();
     const rows = await this.db.withAdmin(c =>
       c.query(
-        `SELECT id, domain_id, supplier_id, entity, op, entity_id FROM sync_events WHERE id > $1 ORDER BY id ASC`,
-        [this.lastId],
+        `SELECT id, domain_id, supplier_id, entity, op, entity_id FROM sync_events WHERE id > $1::bigint ORDER BY id ASC`,
+        [this.lastId.toString()],
       ),
     ).then(r => r.rows);
     for (const row of rows) {
       this.sse.onEvent(row);
-      this.lastId = row.id as number;
+      this.lastId = BigInt(row.id as string);
     }
   }
 
   async onModuleDestroy() {
-    this.connected = false;
     if (this.cleanupTimer) clearInterval(this.cleanupTimer);
     await this.listener.end().catch(() => {});
-  }
-
-  stats() {
-    return { connected: this.connected, lastId: this.lastId };
   }
 
   private async cleanup(): Promise<void> {
@@ -60,15 +55,15 @@ export class PgListenerService implements OnModuleInit, OnModuleDestroy {
     } catch { /* таблицы ещё не созданы — повторим на следующем цикле */ }
   }
 
-  private async readAndEmit(id: number) {
+  private async readAndEmit(id: bigint) {
     const { rows } = await this.db.withAdmin(c =>
       c.query(
-        `SELECT id, domain_id, supplier_id, entity, op, entity_id FROM sync_events WHERE id = $1`,
-        [id],
+        `SELECT id, domain_id, supplier_id, entity, op, entity_id FROM sync_events WHERE id = $1::bigint`,
+        [id.toString()],
       ),
     );
     if (!rows[0]) return;
     this.sse.onEvent(rows[0]);
-    if ((rows[0].id as number) > this.lastId) this.lastId = rows[0].id as number;
+    this.lastId = id;
   }
 }

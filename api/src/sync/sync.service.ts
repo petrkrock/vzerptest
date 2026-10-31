@@ -123,11 +123,11 @@ export class SyncService {
         one('suppliers'), one('buyers'), one('tasks'), one('tickets'), one('media_records'),
       ]);
       const { rows: verRows } = await c.query(
-        `SELECT COALESCE(MAX(id), 0)::int AS v FROM sync_events WHERE domain_id = $1`,
+        `SELECT COALESCE(MAX(id), 0)::text AS v FROM sync_events WHERE domain_id = $1`,
         [user.domain_id],
       );
       return {
-        syncVersion: verRows[0]?.v ?? 0,
+        syncVersion: String(verRows[0]?.v ?? '0'),
         settings: s[0]?.settings ?? null,
         suppliers,
         buyers,
