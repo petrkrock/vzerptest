@@ -31,6 +31,15 @@ export class SseService implements OnModuleDestroy {
     this.clients.clear();
   }
 
+  stats() {
+    const keys = new Map<string, number>();
+    for (const c of this.clients.values()) {
+      const key = `${c.domainId}:${c.supplierId ?? 'crm'}`;
+      keys.set(key, (keys.get(key) ?? 0) + 1);
+    }
+    return { clients: this.clients.size, keys: Object.fromEntries(keys) };
+  }
+
   async connectCrm(ticketId: string, lastId: number, res: any, origin?: string) {
     const t = await this.ticket.consume(ticketId);
     if (!t || t.supplier_id !== null) {

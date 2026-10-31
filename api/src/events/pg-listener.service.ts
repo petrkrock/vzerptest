@@ -7,6 +7,7 @@ import { DatabaseService } from '../database/database.service';
 export class PgListenerService implements OnModuleInit, OnModuleDestroy {
   private listener: Client;
   private lastId = 0;
+  private connected = false;
   private cleanupTimer: NodeJS.Timeout | null = null;
 
   constructor(private sse: SseService, private db: DatabaseService) {
@@ -24,6 +25,7 @@ export class PgListenerService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit() {
     await this.listener.connect();
     await this.listener.query('LISTEN sync_events');
+    this.connected = true;
     this.cleanupTimer = setInterval(() => void this.cleanup(), 3600000);
     this.cleanupTimer.unref?.();
     void this.cleanup();
@@ -40,8 +42,13 @@ export class PgListenerService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleDestroy() {
+    this.connected = false;
     if (this.cleanupTimer) clearInterval(this.cleanupTimer);
     await this.listener.end().catch(() => {});
+  }
+
+  stats() {
+    return { connected: this.connected, lastId: this.lastId };
   }
 
   private async cleanup(): Promise<void> {
