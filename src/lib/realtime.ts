@@ -48,8 +48,7 @@ async function connect() {
     };
     source.onmessage = (event) => {
       if (event.lastEventId) {
-        const version = Number(event.lastEventId);
-        if (!Number.isNaN(version)) setLastSyncVersion(version);
+        setLastSyncVersion(event.lastEventId);
       }
       try {
         const data = JSON.parse(event.data) as { type?: string };

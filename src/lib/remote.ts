@@ -12,7 +12,7 @@ export function remoteSyncEnabled(): boolean {
 type Entity = 'suppliers' | 'buyers' | 'tasks' | 'tickets' | 'mediaRecords';
 
 interface Snapshot {
-  syncVersion: number;
+  syncVersion: string;
   settings: AppSettings;
   suppliers: Supplier[];
   buyers: Buyer[];
@@ -23,12 +23,12 @@ interface Snapshot {
 
 export async function pullRemoteSnapshot(): Promise<Snapshot> {
   const snap = await apiRequest<{
-    syncVersion?: number;
+    syncVersion?: string;
     settings: unknown; suppliers: unknown[]; buyers: unknown[]; tasks: unknown[];
     tickets: unknown[]; mediaRecords: unknown[];
   }>('/sync/snapshot');
   return {
-    syncVersion: snap.syncVersion ?? 0,
+    syncVersion: snap.syncVersion ?? '0',
     settings: snap.settings as AppSettings,
     suppliers: camelize<Supplier[]>(snap.suppliers),
     buyers: camelize<Buyer[]>(snap.buyers),

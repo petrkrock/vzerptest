@@ -87,7 +87,7 @@ export default function SupplierServicePage() {
   const [matBusy, setMatBusy] = useState(false);
   const [showStatusInfo, setShowStatusInfo] = useState(false); // v1.30.84: справка по статусам в шапке блока
   const [newsEditId, setNewsEditId] = useState<string | null>(null); // v1.30.86: просмотр/редактирование новости из ЛК
-  const lkSyncVersionRef = useRef(0); // v1.35.4: курсор событийной синхронизации ЛК
+  const lkSyncVersionRef = useRef('0'); // v1.35.4: курсор событийной синхронизации ЛК
 
   // v1.30.81: расшифровки статусов размещений (иконка-? в строке)
   // v1.30.86: короткие формулировки + карта цветов статусов
@@ -157,7 +157,7 @@ export default function SupplierServicePage() {
     if (!true || !/^[a-f0-9]{32}$/.test(token)) { setLoading(false); setFatal('Недействительная ссылка'); return; }
     fetch(`${API_URL}/lk?token=${token}`, { headers: {'Content-Type': 'application/json'} })
       .then(r => r.json())
-      .then(d => { if (d.error) setFatal(d.error); else { if (typeof d?.syncVersion === 'number') lkSyncVersionRef.current = d.syncVersion; setData(prev => prev ? {
+      .then(d => { if (d.error) setFatal(d.error); else { if (typeof d?.syncVersion === 'string') lkSyncVersionRef.current = d.syncVersion; setData(prev => prev ? {
         ...prev,
         // ТЗ v1.23.52: мерджим ТОЛЬКО скаляры — GET-метаданные содержат пустые массивы,
         // которые затирали загруженные условия/склады после F5.
@@ -233,8 +233,7 @@ export default function SupplierServicePage() {
         source.onopen = () => { reconnectAttempt = 0; };
         source.onmessage = (event) => {
           if (event.lastEventId) {
-            const version = Number(event.lastEventId);
-            if (!Number.isNaN(version)) lkSyncVersionRef.current = version;
+            lkSyncVersionRef.current = event.lastEventId;
           }
           refresh();
         };
@@ -462,7 +461,7 @@ export default function SupplierServicePage() {
         body: JSON.stringify({ token, pin, ...payload }),
       });
       const d = await res.json();
-      if (typeof d?.syncVersion === 'number') lkSyncVersionRef.current = d.syncVersion;
+      if (typeof d?.syncVersion === 'string') lkSyncVersionRef.current = d.syncVersion;
       if (!res.ok || d.error) return d.error || 'Ошибка сохранения';
       // ТЗ v1.23.41: дедупликация — одинаковые данные не вызывают перерисовку (ЛК тормозил)
       const key = JSON.stringify([d.warehouses, d.serviceSearch, d.contactName, d.contactPhone, d.contactEmail, d.multiWarehouse, d.availableCities]);
@@ -1610,8 +1609,11 @@ export default function SupplierServicePage() {
                             setNotice('');
                             if (active && idx >= 0) {
                               // ТЗ v1.25.7: покрытый город открывает СВОЁ условие (пара склад+город) на редактирование
-                              const cid = (list[idx].c as { id?: string }).id;
-                              const real = (data?.serviceSearch || []).findIndex(x => (x as { id?: string }).id === cid);
+                              const current = list[idx] as { id?: string; c?: { id?: string } } | undefined;
+                              const cid = current?.c?.id || current?.id;
+                              const real = cid
+                                ? (data?.serviceSearch || []).findIndex(x => (x as { id?: string }).id === cid)
+                                : idx;
                               if (real >= 0) {
                                 setEditingIdx(real);
                                 setCondForm({ ...(data!.serviceSearch![real] as object) } as Cond);

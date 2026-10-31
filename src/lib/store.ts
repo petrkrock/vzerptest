@@ -596,13 +596,13 @@ export function useStoreVersion(): number {
 
 let syncTimer: ReturnType<typeof setTimeout> | null = null;
 const SYNC_DEBOUNCE_MS = 250;
-let lastSyncVersion = 0;
+let lastSyncVersion = '0';
 
-export function getLastSyncVersion(): number {
+export function getLastSyncVersion(): string {
   return lastSyncVersion;
 }
 
-export function setLastSyncVersion(version: number): void {
+export function setLastSyncVersion(version: string): void {
   lastSyncVersion = version;
 }
 
@@ -781,7 +781,7 @@ export async function initRemoteSync(): Promise<void> {
     console.warn('[store] pull не удался — локальные данные сохранены, синхронизация отложена.');
     return;
   }
-  setLastSyncVersion(remote.syncVersion || 0);
+  setLastSyncVersion(remote.syncVersion || '0');
 
   let localRaw: CRMStore | null = null;
   try {
