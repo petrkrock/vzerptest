@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, NotFoundException, Injectable } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { DatabaseService } from '../database/database.service';
+import { EventLogService } from '../events/event-log.service';
 import {
   TOKEN_RE, pinOk, validateWarehouses, validateConditions, withStatuses,
 } from './validators';
@@ -45,7 +46,10 @@ interface SupplierRow {
 
 @Injectable()
 export class LkService {
-  constructor(private db: DatabaseService) {}
+  constructor(
+    private db: DatabaseService,
+    private eventLog: EventLogService,
+  ) {}
 
   // ─────────────────────────────────────────────────────────────
   // GET /lk?token= — только публичные данные (зеркало v1.31.18).
@@ -66,6 +70,7 @@ export class LkService {
       status: supplier.status || '',
       warehouses: supplier.warehouse_locations || [],
       availableCities,
+      syncVersion: await this.getSyncVersion(supplier),
     };
   }
 
@@ -144,6 +149,7 @@ export class LkService {
           c.query(`UPDATE public.suppliers SET history = $1::jsonb WHERE id = $2`, [JSON.stringify(hist.slice(-200)), supplier.id]),
         );
       }
+      await this.emitLkEvent(supplier, 'suppliers', 'update', supplier.id, true);
       return { ok: true, acceptedEdition: edition };
     }
 
@@ -199,6 +205,7 @@ export class LkService {
            rec.price_per_month, rec.total_price, rec.discount, rec.contract_no, rec.contract_date, rec.start_date, rec.notes],
         );
       });
+      await this.emitLkEvent(supplier, 'mediaRecords', 'create', rec.id, true);
       return { ok: true };
     }
 
@@ -224,6 +231,7 @@ export class LkService {
         createdAt: new Date().toISOString(),
       };
       await this.saveSettings({ ...settings, marketNews: [entry, ...news] });
+      await this.emitLkEvent(supplier, 'settings', 'update', 'global', false);
       return { ok: true };
     }
 
@@ -243,6 +251,7 @@ export class LkService {
         history: [{ at: new Date().toISOString(), by: 'ЛК поставщика', action: 'Договор отправлен из ЛК (статус «Новый»)' }],
       };
       await this.saveSettings({ ...settings, mediaContracts: [...contracts, nc] });
+      await this.emitLkEvent(supplier, 'settings', 'update', 'global', false);
       return { ok: true };
     }
 
@@ -269,6 +278,7 @@ export class LkService {
       await this.db.withAdmin(c =>
         c.query(`UPDATE public.media_records SET material = $1::jsonb, history = $2::jsonb, updated_at = now() WHERE id = $3`, [JSON.stringify(material), JSON.stringify(hist.slice(-200)), recordId]),
       );
+      await this.emitLkEvent(supplier, 'mediaRecords', 'update', recordId, true);
       return { ok: true };
     }
 
@@ -281,6 +291,7 @@ export class LkService {
           ? { ...n, title: String(nu.title ?? n.title ?? ''), description: String(nu.description ?? n.description ?? ''), link: String(nu.link ?? n.link ?? ''), imageUrl: String(nu.imageUrl ?? n.imageUrl ?? ''), date: String(nu.date ?? n.date ?? '') }
           : n)));
       await this.saveSettings({ ...settings, marketNews: nextNews });
+      await this.emitLkEvent(supplier, 'settings', 'update', 'global', false);
       return { ok: true };
     }
 
@@ -317,6 +328,7 @@ export class LkService {
     await this.db.withAdmin(c =>
       c.query(`UPDATE public.suppliers SET ${sets} WHERE id = $${keys.length + 1}`, [...vals, supplier.id]),
     );
+    await this.emitLkEvent(supplier, 'suppliers', 'update', supplier.id, true);
 
     // ТЗ v1.23.39: контакты/ИНН в POST-ответ — иначе ЛК терял их после сохранения.
     const c0 = Array.isArray(supplier.contacts) ? supplier.contacts[0] : undefined;
@@ -331,6 +343,36 @@ export class LkService {
       multiWarehouse: await this.readMultiwarehouse(supplier.id),
       availableCities: await this.readCities(),
     };
+  }
+
+  private async getSyncVersion(supplier: SupplierRow): Promise<number> {
+    if (!supplier.domain_id) return 0;
+    const { rows } = await this.db.withAdmin(c =>
+      c.query(
+        `SELECT COALESCE(MAX(id), 0)::int AS v FROM sync_events WHERE domain_id = $1 AND (supplier_id = $2 OR supplier_id IS NULL)`,
+        [supplier.domain_id, supplier.id],
+      ),
+    );
+    return rows[0]?.v ?? 0;
+  }
+
+  private async emitLkEvent(
+    supplier: SupplierRow,
+    entity: string,
+    op: string,
+    entityId: string,
+    supplierScoped: boolean,
+  ): Promise<void> {
+    if (!supplier.domain_id) return;
+    await this.db.withAdmin(c =>
+      this.eventLog.record(c, {
+        domain_id: supplier.domain_id!,
+        supplier_id: supplierScoped ? supplier.id : null,
+        entity,
+        op,
+        entity_id: entityId,
+      }),
+    );
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -432,6 +474,7 @@ export class LkService {
       dashboard: await this.buildDashboard(settings),
       availableCities: await this.readCities(),
       serverTime: now,
+      syncVersion: await this.getSyncVersion(supplier),
     };
   }
 

@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { PoolClient } from 'pg';
 import { DatabaseService, RequestUser } from '../database/database.service';
+import { EventLogService } from '../events/event-log.service';
 import { randomBytes } from 'crypto';
 
 // v1.34.6: синк стора. Единственный транспорт к своему API (Supabase вырезан).
@@ -83,7 +85,10 @@ function paramExpr(col: string, idx: number, arrayCols: Set<string>): string {
 
 @Injectable()
 export class SyncService {
-  constructor(private db: DatabaseService) {}
+  constructor(
+    private db: DatabaseService,
+    private eventLog: EventLogService,
+  ) {}
 
   // v1.35.3-fix5: реальные колонки таблиц (information_schema, кеш на процесс).
   // UPDATE/INSERT собираются по ключам данных фронта — если в БД нет хоть одной
@@ -117,7 +122,19 @@ export class SyncService {
       const [suppliers, buyers, tasks, tickets, mediaRecords] = await Promise.all([
         one('suppliers'), one('buyers'), one('tasks'), one('tickets'), one('media_records'),
       ]);
-      return { settings: s[0]?.settings ?? null, suppliers, buyers, tasks, tickets, mediaRecords };
+      const { rows: verRows } = await c.query(
+        `SELECT COALESCE(MAX(id), 0)::int AS v FROM sync_events WHERE domain_id = $1`,
+        [user.domain_id],
+      );
+      return {
+        syncVersion: verRows[0]?.v ?? 0,
+        settings: s[0]?.settings ?? null,
+        suppliers,
+        buyers,
+        tasks,
+        tickets,
+        mediaRecords,
+      };
     });
   }
 
@@ -132,6 +149,7 @@ export class SyncService {
          ON CONFLICT (id) DO UPDATE SET settings = EXCLUDED.settings, updated_at = now()`,
         [JSON.stringify(settings)],
       );
+      await this.eventLog.record(c, { domain_id: user.domain_id, entity: 'settings', op: 'update', entity_id: 'global' });
       return { ok: true };
     });
   }
@@ -240,6 +258,14 @@ export class SyncService {
               await c.query(`DELETE FROM ${table} WHERE id = $1`, [op.id]);
             }
           }
+            const supplierId = await this.resolveSupplierId(c, op);
+            await this.eventLog.record(c, {
+              domain_id: user.domain_id,
+              supplier_id: supplierId,
+              entity: op.entity,
+              op: op.op,
+              entity_id: op.id,
+            });
             applied++;
           } catch (e) {
             await c.query(`ROLLBACK TO SAVEPOINT ${sp}`);
@@ -267,6 +293,20 @@ export class SyncService {
         throw new BadRequestException(`Не заполнено обязательное поле: ${field}`);
       }
     }
+  }
+
+  private async resolveSupplierId(c: PoolClient, op: SyncOp): Promise<string | null> {
+    if (op.entity === 'suppliers') return op.id;
+    if (op.entity === 'mediaRecords') {
+      if (op.op === 'create') {
+        const sid = (op.data as Record<string, unknown> | undefined)?.supplier_id
+          ?? (op.data as Record<string, unknown> | undefined)?.supplierId;
+        if (typeof sid === 'string' && UUID_RE.test(sid)) return sid;
+      }
+      const { rows } = await c.query(`SELECT supplier_id FROM public.media_records WHERE id = $1`, [op.id]);
+      return rows[0]?.supplier_id ?? null;
+    }
+    return null;
   }
 
   private validateOp(raw: SyncOp): SyncOp {

@@ -12,9 +12,10 @@ import { PublicModule } from './public/public.module';
 import { CheckoModule } from './checko/checko.module';
 import { FilesModule } from './files/files.module';
 import { LogsModule } from './logs/logs.module';
+import { EventsModule } from './events/events.module';
 
 // v1.34.0: Supabase вырезан — все модули живут здесь (checko/files/logs — замена storage/edge).
 @Module({
-  imports: [DatabaseModule, AuthModule, HealthModule, SuppliersModule, BuyersModule, LkModule, EmailModule, SyncModule, DomainsModule, PublicModule, CheckoModule, FilesModule, LogsModule],
+  imports: [DatabaseModule, AuthModule, HealthModule, SuppliersModule, BuyersModule, LkModule, EmailModule, SyncModule, DomainsModule, PublicModule, CheckoModule, FilesModule, LogsModule, EventsModule],
 })
 export class AppModule {}
