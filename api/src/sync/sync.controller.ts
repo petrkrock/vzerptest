@@ -39,8 +39,10 @@ export class SyncController {
   async stream(
     @Query('ticket') ticket: string,
     @Query('last_id') lastId: string,
+    @Req() req: { headers?: Record<string, unknown> },
     @Res() reply: FastifyReply,
   ) {
-    await this.sse.connectCrm(ticket, Number(lastId) || 0, reply.raw);
+    const origin = typeof req?.headers?.origin === 'string' ? req.headers.origin : undefined;
+    await this.sse.connectCrm(ticket, Number(lastId) || 0, reply.raw, origin);
   }
 }

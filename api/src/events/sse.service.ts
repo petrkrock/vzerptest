@@ -31,16 +31,22 @@ export class SseService implements OnModuleDestroy {
     this.clients.clear();
   }
 
-  async connectCrm(ticketId: string, lastId: number, res: any) {
+  async connectCrm(ticketId: string, lastId: number, res: any, origin?: string) {
     const t = await this.ticket.consume(ticketId);
-    if (!t || t.supplier_id !== null) { res.writeHead(403).end(); return; }
-    await this.setupStream({ domainId: t.domain_id, supplierId: null, lastId, res });
+    if (!t || t.supplier_id !== null) {
+      this.writeHead(res, 403, origin).end();
+      return;
+    }
+    await this.setupStream({ domainId: t.domain_id, supplierId: null, lastId, res, origin });
   }
 
-  async connectLk(ticketId: string, lastId: number, res: any) {
+  async connectLk(ticketId: string, lastId: number, res: any, origin?: string) {
     const t = await this.ticket.consume(ticketId);
-    if (!t || t.supplier_id === null) { res.writeHead(403).end(); return; }
-    await this.setupStream({ domainId: t.domain_id, supplierId: t.supplier_id, lastId, res });
+    if (!t || t.supplier_id === null) {
+      this.writeHead(res, 403, origin).end();
+      return;
+    }
+    await this.setupStream({ domainId: t.domain_id, supplierId: t.supplier_id, lastId, res, origin });
   }
 
   onEvent(row: { id: number; domain_id: string; supplier_id: string | null; entity: string; op: string; entity_id: string | null }) {
@@ -54,7 +60,7 @@ export class SseService implements OnModuleDestroy {
     }
   }
 
-  private async setupStream(opts: { domainId: string; supplierId: string | null; lastId: number; res: any }) {
+  private async setupStream(opts: { domainId: string; supplierId: string | null; lastId: number; res: any; origin?: string }) {
     const id = `${++this.seq}`;
     const client: SseClient = { id, domainId: opts.domainId, supplierId: opts.supplierId, res: opts.res, lastId: opts.lastId, addedAt: Date.now() };
     const key = `${opts.domainId}:${opts.supplierId ?? 'crm'}`;
@@ -64,7 +70,7 @@ export class SseService implements OnModuleDestroy {
       this.removeClient(old.id);
     }
     this.clients.set(id, client);
-    opts.res.writeHead(200, {
+    this.writeHead(opts.res, 200, opts.origin, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
@@ -75,6 +81,15 @@ export class SseService implements OnModuleDestroy {
     }
     opts.res.on('close', () => this.removeClient(id));
     opts.res.on('error', () => this.removeClient(id));
+  }
+
+  private writeHead(res: any, status: number, origin?: string, headers: Record<string, string> = {}) {
+    const corsHeaders: Record<string, string> = {
+      'Access-Control-Allow-Origin': origin || '*',
+    };
+    if (origin) corsHeaders['Access-Control-Allow-Credentials'] = 'true';
+    res.writeHead(status, { ...corsHeaders, ...headers });
+    return res;
   }
 
   private async sendBacklog(client: SseClient) {
@@ -117,18 +132,11 @@ export class SseService implements OnModuleDestroy {
 
   private writeEvent(client: SseClient, row: any) {
     const payload = JSON.stringify({ type: 'change', entity: row.entity, op: row.op, entityId: row.entity_id });
-    this.writeRaw(client, `id: ${row.id}
-event: message
-data: ${payload}
-
-`);
+    this.writeRaw(client, `id: ${row.id}\nevent: message\ndata: ${payload}\n\n`);
   }
 
   private write(client: SseClient, event: string, data: string) {
-    this.writeRaw(client, `event: ${event}
-data: ${data}
-
-`);
+    this.writeRaw(client, `event: ${event}\ndata: ${data}\n\n`);
   }
 
   private writeRaw(client: SseClient, chunk: string) {

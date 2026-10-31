@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Post, Query, Res } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Post, Query, Req, Res } from '@nestjs/common';
 import { FastifyReply } from 'fastify';
 import { LkService } from './lk.service';
 import { Public } from '../auth/public.decorator';
@@ -40,8 +40,10 @@ export class LkController {
   async stream(
     @Query('ticket') ticket: string,
     @Query('last_id') lastId: string,
+    @Req() req: { headers?: Record<string, unknown> },
     @Res() reply: FastifyReply,
   ) {
-    await this.sse.connectLk(ticket, Number(lastId) || 0, reply.raw);
+    const origin = typeof req?.headers?.origin === 'string' ? req.headers.origin : undefined;
+    await this.sse.connectLk(ticket, Number(lastId) || 0, reply.raw, origin);
   }
 }
