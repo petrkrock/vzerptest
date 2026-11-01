@@ -119,9 +119,12 @@ export class SyncService {
         );
         return rows;
       };
-      const [suppliers, buyers, tasks, tickets, mediaRecords] = await Promise.all([
-        one('suppliers'), one('buyers'), one('tasks'), one('tickets'), one('media_records'),
-      ]);
+      // Последовательно: параллельные запросы на одном pg-client дают DeprecationWarning.
+      const suppliers = await one('suppliers');
+      const buyers = await one('buyers');
+      const tasks = await one('tasks');
+      const tickets = await one('tickets');
+      const mediaRecords = await one('media_records');
       const { rows: verRows } = await c.query(
         `SELECT COALESCE(MAX(id), 0)::text AS v FROM sync_events WHERE domain_id = $1`,
         [user.domain_id],
