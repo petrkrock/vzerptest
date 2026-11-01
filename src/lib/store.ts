@@ -537,7 +537,6 @@ settings.taskTypes = Array.from(new Set([...(settings.taskTypes || []).filter((t
 }
 
 export function clearLocalStoreCache() {
-  console.warn('[store] clearLocalStoreCache вызван:', new Error('trace').stack);
   if (syncTimer) { clearTimeout(syncTimer); syncTimer = null; }
   localStorage.removeItem(STORE_KEY);
   lastSavedJson = '';

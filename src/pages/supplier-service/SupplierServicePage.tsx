@@ -215,7 +215,7 @@ export default function SupplierServicePage() {
       if (refreshTimer) clearTimeout(refreshTimer);
       refreshTimer = setTimeout(() => {
         refreshTimer = null;
-        void post({}, true).catch(() => {});
+        void post({}, true).then(() => loadLkInfo()).catch(() => {});
       }, 100);
     };
 
