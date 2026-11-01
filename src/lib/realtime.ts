@@ -1,5 +1,5 @@
 import { API_URL, apiRequest, ApiError } from './api';
-import { getLastSyncVersion, initRemoteSync, setLastSyncVersion } from './store';
+import { getLastSyncVersion, refreshRemoteSnapshot, setLastSyncVersion } from './store';
 
 let source: EventSource | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -17,7 +17,7 @@ function scheduleRefresh() {
   if (refreshTimer) clearTimeout(refreshTimer);
   refreshTimer = setTimeout(() => {
     refreshTimer = null;
-    void initRemoteSync();
+    void refreshRemoteSnapshot();
   }, 100);
 }
 
@@ -52,7 +52,7 @@ async function connect() {
       }
       try {
         const data = JSON.parse(event.data) as { type?: string };
-        if (data.type === 'resync_required') void initRemoteSync();
+        if (data.type === 'resync_required') void refreshRemoteSnapshot();
         else scheduleRefresh();
       } catch {
         scheduleRefresh();

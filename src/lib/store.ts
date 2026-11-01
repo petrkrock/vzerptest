@@ -840,6 +840,38 @@ export async function initRemoteSync(): Promise<void> {
   }
 }
 
+// Realtime refresh: только применяет свежий snapshot к локальному store.
+// Важно не вызывать initRemoteSync из SSE — иначе merge снова идёт в pushRemoteDiff
+// и получается бесконечный цикл событие → snapshot → push → событие.
+export async function refreshRemoteSnapshot(): Promise<void> {
+  if (!remoteSyncEnabled()) return;
+  const remote = await pullRemoteSnapshot();
+  if (!remote) return;
+  setLastSyncVersion(remote.syncVersion || '0');
+
+  let localRaw: CRMStore | null = null;
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (raw) localRaw = JSON.parse(raw) as CRMStore;
+  } catch { /* ignore malformed local cache */ }
+
+  const merged: CRMStore = {
+    suppliers: remote.suppliers,
+    buyers: remote.buyers,
+    tasks: remote.tasks,
+    tickets: remote.tickets,
+    mediaRecords: remote.mediaRecords,
+    settings: mergeSettings(remote.settings, localRaw?.settings, defaultStore().settings),
+  };
+
+  const json = JSON.stringify(merged);
+  if (json !== lastSavedJson) {
+    lastSavedJson = json;
+    localStorage.setItem(STORE_KEY, json);
+    notifyStoreChange();
+  }
+}
+
 function localSessionEmail(): string | null {
   try {
     const raw = localStorage.getItem('vz_crm_session');

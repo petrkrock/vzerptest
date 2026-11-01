@@ -282,7 +282,7 @@ export default function DatabasePage() {
               {pagedData.map((row, rowIndex) => {
                 const isDeleted = !!row['deletedAt'];
                 return (
-                  <tr key={(row['id'] as string | undefined) ?? `${tab}-${page}-${rowIndex}`} className={`border-b border-brand-gray-mid hover:bg-brand-gray ${isDeleted ? 'opacity-50' : ''}`}>
+                  <tr key={`${(row['id'] as string | undefined) ?? 'row'}:${rowIndex}`} className={`border-b border-brand-gray-mid hover:bg-brand-gray ${isDeleted ? 'opacity-50' : ''}`}>
                     {!isLogTab && tab !== 'Пользователи' && tab !== 'Логи синка' && (
                       <td className="table-cell" onClick={e => e.stopPropagation()}>
                         <input type="checkbox" checked={selected.includes(row['id'] as string)} onChange={() => toggleSelect(row['id'] as string)} className="rounded" />
