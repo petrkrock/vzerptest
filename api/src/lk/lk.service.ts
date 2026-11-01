@@ -32,7 +32,6 @@ interface SupplierRow {
   status?: string;
   warehouse_locations?: Array<Record<string, unknown>>;
   service_search?: Array<Record<string, unknown>>;
-  service_search_conditions?: Array<Record<string, unknown>>;
   lk_news_json?: string;
   lk_news?: Array<Record<string, unknown>>;
   history?: Array<Record<string, unknown>>;
@@ -108,10 +107,9 @@ export class LkService {
       const ware = (patch.warehouse_locations ?? supplier.warehouse_locations ?? []) as Array<{ city: string }>;
       const checked = validateConditions(body.serviceSearch, ware);
       if (typeof checked === 'string') throw new BadRequestException(checked);
-      const toStr = (arr: Array<Record<string, unknown>>) =>
-        arr.map(r => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, String(v ?? '')]))) as Array<Record<string, string>>;
-      const prevConds = toStr((supplier.service_search_conditions || []) as Array<Record<string, unknown>>);
-      patch.service_search = withStatuses(toStr(checked as Array<Record<string, unknown>>), prevConds);
+      // Эталон 1.31.18: прежние статусы берутся из suppliers.service_search по city + warehouseName.
+      const prevConds = (supplier.service_search || []) as Array<Record<string, string>>;
+      patch.service_search = withStatuses(checked as Array<Record<string, string>>, prevConds);
     }
 
     // 3. Контакты кабинета
