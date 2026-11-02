@@ -462,7 +462,7 @@ export default function SupplierServicePage() {
       });
       const d = await res.json();
       if (typeof d?.syncVersion === 'string') lkSyncVersionRef.current = d.syncVersion;
-      if (!res.ok || d.error) return d.error || 'Ошибка сохранения';
+      if (!res.ok || d.error) return d.message || d.error || 'Ошибка сохранения';
       // ТЗ v1.23.41: дедупликация — одинаковые данные не вызывают перерисовку (ЛК тормозил)
       const key = JSON.stringify([d.warehouses, d.serviceSearch, d.contactName, d.contactPhone, d.contactEmail, d.multiWarehouse, d.availableCities]);
       if (key !== lastDataJson.current) {
@@ -948,7 +948,7 @@ export default function SupplierServicePage() {
               {newsModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setNewsModal(null)}>
                   <div className="absolute inset-0 bg-black/40" />
-                  <div className="relative bg-slate-100 rounded-2xl max-w-2xl w-full p-6 space-y-4 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                  <div className="relative bg-slate-100 rounded-2xl max-w-2xl w-full p-6 space-y-4 max-h-[85vh] overflow-y-auto overflow-x-hidden break-words" onClick={e => e.stopPropagation()}>
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-gray-100 text-gray-500">{newsModal.tag || 'Новая функция'}</span>
@@ -959,7 +959,7 @@ export default function SupplierServicePage() {
                         className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400 shrink-0">✕</button>
                     </div>
                     {newsModal.fullText
-                      ? <div className="text-sm text-gray-700 leading-relaxed" dangerouslySetInnerHTML={{ __html: newsModal.fullText }} />
+                      ? <div className="text-sm text-gray-700 leading-relaxed break-words [&_img]:max-w-full [&_table]:max-w-full" dangerouslySetInnerHTML={{ __html: newsModal.fullText }} />
                       : <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{newsModal.text}</p>}
                   </div>
                 </div>
@@ -1543,16 +1543,22 @@ export default function SupplierServicePage() {
               {(data.warehouses || []).length === 0 && (
                 <p className="text-sm text-gray-800">Шаг 1. Сначала добавьте склад – это необходимо для создания условий в поиске.</p>
               )}
-              <div className="flex flex-wrap gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
                 {(data.warehouses || []).map(w => {
                     const st = w.status || (w.verified ? 'Проверен' : 'Новый');
-                    const borderCls = editingWhId === w.id ? 'border-red-400 ring-2 ring-red-200'
-                      : st === 'Заморожен' ? 'border-gray-300 bg-gray-100 opacity-60'
-                      : st === 'Проверен' ? (selectedWh === w.city ? 'border-green-500 bg-green-50 ring-2 ring-green-300' : 'border-green-400 bg-green-50 hover:border-green-600')
-                      : (selectedWh === w.city ? 'border-blue-300 bg-blue-50' : 'border-blue-200 bg-white hover:border-blue-400');
+                    const bgCls = st === 'Заморожен'
+                      ? 'bg-gray-100 opacity-60'
+                      : st === 'Проверен'
+                        ? 'bg-green-50'
+                        : 'bg-blue-50/60';
+                    const shadowCls = selectedWh === w.city
+                      ? 'shadow-md'
+                      : st === 'Заморожен'
+                        ? ''
+                        : 'hover:shadow-md';
                     return (
                   <button key={w.id} type="button" onClick={() => setSelectedWh(prev => prev === w.city ? '' : w.city)}
-                    className={`inline-flex items-center gap-3 rounded-xl border px-4 py-2.5 text-sm transition-colors ${borderCls}`}>
+                    className={`inline-flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm transition-shadow ${bgCls} ${shadowCls}`}>
                     <span className="font-semibold text-gray-800">{w.city}</span>
                     <span className="text-gray-800 text-xs">{Number(w.skuCount).toLocaleString('ru-RU')} SKU</span>
                     <span className={`text-xs ${st === 'Проверен' ? 'text-green-600 font-medium' : st === 'Заморожен' ? 'text-gray-800' : 'text-gray-800'}`}>{st}</span>
@@ -1625,7 +1631,7 @@ export default function SupplierServicePage() {
                             }
                             setPendingCity(prev => prev === c ? null : c);
                           }}
-                          className={`text-sm px-4 py-2 rounded-xl border transition-colors ${active ? 'bg-green-50 border-green-300 text-green-700 font-medium' : 'bg-blue-50/60 border-blue-200 text-gray-700 hover:border-[#64a2ef]'} ${pendingCity === c ? 'ring-2 ring-red-300' : ''}`}>
+                          className={`text-sm px-4 py-2 rounded-xl transition-shadow ${active ? 'bg-green-50 text-green-700 font-medium shadow-md' : 'bg-blue-50/60 text-gray-700 hover:shadow-md'} ${pendingCity === c ? 'shadow-md shadow-red-200' : ''}`}>
                           {c}
                         </button>
                       );
