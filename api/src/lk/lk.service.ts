@@ -557,7 +557,8 @@ export class LkService {
     // со статусом «Заявка создана» не появлялись в «Рекламных размещениях».
     const { rows } = await this.db.withAdmin(c =>
       c.query(
-        `SELECT ad_type_id, ad_type_name, duration_label, start_date, status FROM public.media_records
+        `SELECT id, ad_type_name, duration_label, price_per_month, discount, total_price, material, status, start_date, end_date
+         FROM public.media_records
          WHERE supplier_id = $1
          ORDER BY created_at DESC LIMIT 50`,
         [supplierId],
