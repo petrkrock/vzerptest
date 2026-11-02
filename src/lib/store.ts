@@ -87,7 +87,7 @@ export interface CRMStore {
 
 function defaultAdmin(): AppUser {
   return {
-    id: 'admin-1', name: 'Администратор', email: 'admin@vz.tech',
+    id: '00000000-0000-4000-8000-000000000099', name: 'Администратор', email: 'admin@vz.tech',
     password: '', // v1.34.0: хардкод-пароль удалён. Пароль живёт в БД (profiles.password_hash, bcrypt).
     role: 'admin',
     permissions: { dashboard: true, suppliers: true, buyers: true, tasks: true, support: true, leads: false, media: true, pricing: true, planfact: true, analytics: true, knowledge: true, planfactEdit: true },
@@ -411,6 +411,19 @@ settings.taskTypes = Array.from(new Set([...(settings.taskTypes || []).filter((t
       if (migrated.password === undefined) migrated.password = '';
       return migrated;
     });
+
+    // v1.35.3-fix8_13: легаси-админ 'admin-1' имел не-UUID id — бэкенд занулял responsible_id при синке.
+    // Переводим на UUID из seed_admin.sql и чиним ссылки в сущностях.
+    const LEGACY_ADMIN_ID = 'admin-1';
+    const ADMIN_ID = '00000000-0000-4000-8000-000000000099';
+    if (settings.users.some(u => u.id === LEGACY_ADMIN_ID)) {
+      settings.users = settings.users.map(u => u.id === LEGACY_ADMIN_ID ? { ...u, id: ADMIN_ID } : u);
+      const fixResp = <T extends { responsibleId?: string }>(arr: T[]): T[] =>
+        arr.map(e => e.responsibleId === LEGACY_ADMIN_ID ? { ...e, responsibleId: ADMIN_ID } : e);
+      parsed.suppliers = fixResp(parsed.suppliers || []);
+      parsed.buyers = fixResp(parsed.buyers || []);
+      parsed.tasks = fixResp(parsed.tasks || []);
+    }
 
     const STATUS_RENAMES: Record<string, string> = {
       from_site: 'Новый с сайта',

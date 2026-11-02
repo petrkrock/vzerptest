@@ -1371,8 +1371,9 @@ export default function SupplierServicePage() {
                               <p className="text-sm text-gray-500 w-28 shrink-0 text-right">SKU: <b className="text-gray-800 tabular-nums">{Number(w.skuCount) || 0}</b></p>
                               <span className={`text-[11px] font-semibold px-2 py-1 rounded-md w-24 shrink-0 text-center ${stCls}`}>{st === 'Новый' ? 'в работе' : st}</span>
                               <button type="button"
+                                disabled={st === 'Заморожен'}
                                 onClick={() => { setEditingWhId((w.id as string) || null); setWhCity(String(w.city || '')); setWhAddress(String(w.address || '')); setWhSku(String(w.skuCount || '')); setWhErr({}); setWhModal(true); }}
-                                className="flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-md bg-gray-100 text-gray-500 hover:bg-gray-200 transition-colors shrink-0">
+                                className="flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-md bg-gray-100 text-gray-500 hover:bg-gray-200 transition-colors shrink-0 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-gray-100">
                                 <Pencil size={10} /> Редактировать
                               </button>
                             </div>
@@ -1550,20 +1551,18 @@ export default function SupplierServicePage() {
                     const bgCls = st === 'Заморожен'
                       ? 'bg-gray-100 opacity-60'
                       : st === 'Проверен'
-                        ? 'bg-green-50'
-                        : 'bg-blue-50/60';
+                        ? (selectedWh === w.city ? 'bg-green-100' : 'bg-green-50 hover:bg-green-100')
+                        : (selectedWh === w.city ? 'bg-blue-100/60' : 'bg-blue-50/60 hover:bg-blue-100/60');
                     const shadowCls = selectedWh === w.city
                       ? 'shadow-md'
-                      : st === 'Заморожен'
-                        ? ''
-                        : 'hover:shadow-md';
+                      : '';
                     return (
                   <button key={w.id} type="button" disabled={st === 'Заморожен'} onClick={() => setSelectedWh(prev => prev === w.city ? '' : w.city)}
-                    className={`inline-flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm transition-shadow disabled:cursor-not-allowed ${bgCls} ${shadowCls}`}>
+                    className={`flex w-full items-center gap-3 rounded-xl px-4 py-2.5 text-sm text-left transition-shadow disabled:cursor-not-allowed ${bgCls} ${shadowCls}`}>
                     <span className="font-semibold text-gray-800">{w.city}</span>
                     <span className="text-gray-800 text-xs">{Number(w.skuCount).toLocaleString('ru-RU')} SKU</span>
                     <span className={`text-xs ${st === 'Проверен' ? 'text-green-600 font-medium' : st === 'Заморожен' ? 'text-gray-800' : 'text-gray-800'}`}>{st}</span>
-                    <span onClick={e => e.stopPropagation()} title={w.address ? `Адрес: ${w.address}` : 'Адрес не указан'} className="text-gray-300 hover:text-gray-500 cursor-help inline-flex"><Warehouse size={12} /></span>
+                    <span onClick={e => e.stopPropagation()} title={w.address ? `Адрес: ${w.address}` : 'Адрес не указан'} className="ml-auto text-gray-300 hover:text-gray-500 cursor-help inline-flex"><Warehouse size={12} /></span>
                   </button>
                 );
                 })}
@@ -1617,7 +1616,7 @@ export default function SupplierServicePage() {
                             if (active) return; // v1.35.3-fix8_12: покрытый (зелёный) город не открывает редактор
                             setPendingCity(prev => prev === c ? null : c);
                           }}
-                          className={`text-sm px-4 py-2 rounded-xl transition-shadow ${active ? 'bg-green-50 text-green-700 font-medium shadow-md' : 'bg-blue-50/60 text-gray-700 hover:shadow-md'} ${pendingCity === c ? 'shadow-md' : ''}`}>
+                          className={`text-sm px-4 py-2 rounded-xl transition-shadow ${active ? 'bg-green-100 text-green-700 font-medium shadow-md' : 'bg-blue-50/60 text-gray-700 hover:bg-blue-100/60'} ${pendingCity === c ? 'shadow-md' : ''}`}>
                           {c}
                         </button>
                       );
@@ -1820,7 +1819,7 @@ export default function SupplierServicePage() {
             {(data.serviceSearch || []).length > 0 && (
               <div className="relative bg-white border border-gray-200 rounded-2xl p-5 sm:p-6 h-full">
                 <div className="flex items-start justify-between gap-3 flex-wrap mb-3">
-                  <h2 className="text-base font-semibold text-gray-800">Условия сервиса проценки (DBS)</h2>
+                  <h2 className="text-base font-semibold text-gray-800">Условия сервиса проценки</h2>
                   <div className="flex items-center gap-2">
                     {(['Новое', 'Загружено', 'Есть изменения'] as const).map(st => (
                       <button key={st} type="button" onClick={() => setStatusFilter(p => p === st ? 'all' : st)}
