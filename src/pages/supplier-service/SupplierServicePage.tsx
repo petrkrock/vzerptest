@@ -1362,8 +1362,9 @@ export default function SupplierServicePage() {
                           const stCls = st === 'Проверен' ? 'bg-green-100 text-green-700'
                             : st === 'Заморожен' ? 'bg-gray-100 text-gray-500'
                             : 'bg-blue-100 text-blue-700';
+                          const rowBg = st === 'Заморожен' ? 'bg-gray-100 opacity-60' : st === 'Проверен' ? 'bg-green-50' : 'bg-blue-50/60';
                           return (
-                            <div key={w.id || i} className={`border border-gray-200 rounded-xl px-4 py-3 flex items-center gap-4 hover:border-gray-300 transition-colors ${st === 'Проверен' ? 'bg-green-50' : 'bg-white'}`}>
+                            <div key={w.id || i} className={`rounded-xl px-4 py-3 flex items-center gap-4 transition-shadow ${rowBg} hover:shadow-md`}>
                               <Warehouse size={16} className="text-gray-400 shrink-0" />
                               <p className="text-sm font-semibold text-gray-800 w-36 shrink-0 truncate">{String(w.city || '—')}</p>
                               <p className="text-xs text-gray-500 flex-1 min-w-[140px] truncate">{String(w.address || '—')}</p>
@@ -1460,7 +1461,7 @@ export default function SupplierServicePage() {
                     <h3 className="text-sm font-semibold text-gray-600">Активные сервисы продаж</h3>
                     <div className="flex flex-wrap gap-1.5">
                       {svc.map(s => (
-                        <span key={s.code} className={`text-xs font-semibold px-2.5 py-1 rounded-md border ${activeServices.some(x => x.code === s.code) ? 'bg-green-50 border-green-200 text-green-700' : 'bg-gray-50 border-gray-200 text-gray-400'}`}>{s.label}</span>
+                        <span key={s.code} className={`text-xs font-semibold px-2.5 py-1 rounded-md ${activeServices.some(x => x.code === s.code) ? 'bg-green-50 text-green-700' : 'bg-gray-50 text-gray-400'}`}>{s.label}</span>
                       ))}
                     </div>
                     {/* v1.30.58: ссылка на оферту — открывает модалку для чтения */}
@@ -1518,8 +1519,8 @@ export default function SupplierServicePage() {
             {/* ШАГ 1: СОЗДАТЬ СКЛАД + КАРТОЧКА КОМПАНИИ */}
                         {/* МОИ СКЛАДЫ */}
             <div className="relative bg-white border border-gray-200 rounded-2xl p-5 sm:p-6 h-full">
-              <div className="flex items-start justify-between gap-3">
-                <h2 className="text-base font-semibold text-gray-800 mb-3">Мои склады ({(data.warehouses || []).length})</h2>
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <h2 className="text-base font-semibold text-gray-800">Мои склады ({(data.warehouses || []).length})</h2>
                 <div className="flex items-center gap-2 flex-wrap">
                   <button type="button" onClick={() => setLkTab('wh')}
                     className="text-xs px-3 py-1.5 rounded-full border transition-colors bg-white border-gray-200 text-gray-600 hover:border-red-300">
@@ -1543,7 +1544,7 @@ export default function SupplierServicePage() {
               {(data.warehouses || []).length === 0 && (
                 <p className="text-sm text-gray-800">Шаг 1. Сначала добавьте склад – это необходимо для создания условий в поиске.</p>
               )}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                 {(data.warehouses || []).map(w => {
                     const st = w.status || (w.verified ? 'Проверен' : 'Новый');
                     const bgCls = st === 'Заморожен'
@@ -1557,8 +1558,8 @@ export default function SupplierServicePage() {
                         ? ''
                         : 'hover:shadow-md';
                     return (
-                  <button key={w.id} type="button" onClick={() => setSelectedWh(prev => prev === w.city ? '' : w.city)}
-                    className={`inline-flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm transition-shadow ${bgCls} ${shadowCls}`}>
+                  <button key={w.id} type="button" disabled={st === 'Заморожен'} onClick={() => setSelectedWh(prev => prev === w.city ? '' : w.city)}
+                    className={`inline-flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm transition-shadow disabled:cursor-not-allowed ${bgCls} ${shadowCls}`}>
                     <span className="font-semibold text-gray-800">{w.city}</span>
                     <span className="text-gray-800 text-xs">{Number(w.skuCount).toLocaleString('ru-RU')} SKU</span>
                     <span className={`text-xs ${st === 'Проверен' ? 'text-green-600 font-medium' : st === 'Заморожен' ? 'text-gray-800' : 'text-gray-800'}`}>{st}</span>
@@ -1600,7 +1601,7 @@ export default function SupplierServicePage() {
                 const filtered = cities.filter(c => cityFilter === 'all' ? true : cityFilter === 'covered' ? isCov(c) : !isCov(c));
                 if (!filtered.length) return <p className="text-xs text-gray-800 mt-3">Городов по выбранному фильтру нет.</p>;
                 return (
-                  <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-8 gap-2 mt-3">
+                  <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2 mt-3">
                     {filtered.map(c => {
                       // ТЗ v1.25.7: уникальность ПАРОЙ склад+город — один склад покрывает все города
                       const idx = list.findIndex(x => (x.city || '').toLowerCase() === c.toLowerCase() && (x.warehouseName || '') === selectedWh);
@@ -1613,25 +1614,10 @@ export default function SupplierServicePage() {
                               return;
                             }
                             setNotice('');
-                            if (active && idx >= 0) {
-                              // ТЗ v1.25.7: покрытый город открывает СВОЁ условие (пара склад+город) на редактирование
-                              const current = list[idx] as { id?: string; c?: { id?: string } } | undefined;
-                              const cid = current?.c?.id || current?.id;
-                              const real = cid
-                                ? (data?.serviceSearch || []).findIndex(x => (x as { id?: string }).id === cid)
-                                : idx;
-                              if (real >= 0) {
-                                setEditingIdx(real);
-                                setCondForm({ ...(data!.serviceSearch![real] as object) } as Cond);
-                                setTkOn(String((data!.serviceSearch![real] as { orderUnloadSchedule?: string }).orderUnloadSchedule || '').includes('Условия доставки по согласованию!'));
-                                setEditorOpen(true);
-                              }
-                              setPendingCity(null);
-                              return;
-                            }
+                            if (active) return; // v1.35.3-fix8_12: покрытый (зелёный) город не открывает редактор
                             setPendingCity(prev => prev === c ? null : c);
                           }}
-                          className={`text-sm px-4 py-2 rounded-xl transition-shadow ${active ? 'bg-green-50 text-green-700 font-medium shadow-md' : 'bg-blue-50/60 text-gray-700 hover:shadow-md'} ${pendingCity === c ? 'shadow-md shadow-red-200' : ''}`}>
+                          className={`text-sm px-4 py-2 rounded-xl transition-shadow ${active ? 'bg-green-50 text-green-700 font-medium shadow-md' : 'bg-blue-50/60 text-gray-700 hover:shadow-md'} ${pendingCity === c ? 'shadow-md' : ''}`}>
                           {c}
                         </button>
                       );
