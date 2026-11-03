@@ -107,3 +107,31 @@ export function parseCSV(text: string): Record<string, string>[] {
 }
 
 // v1.32.8: debounce() удалён — единственное вхождение во всём src было объявлением.
+
+// v1.35.3-fix8_15: заголовок, сохранённый в двойной кодировке (UTF-8 прочитанный как windows-1251).
+// Идемпотентно: чистый текст (кириллица вне пар Р/С+trail, латиница) проходит без изменений.
+const CP1251_REV = new Map<string, number>();
+{
+  const dec = new TextDecoder('windows-1251');
+  for (let b = 0x80; b <= 0xff; b++) CP1251_REV.set(dec.decode(new Uint8Array([b])), b);
+}
+export function fixMojibake(s: string): string {
+  if (!s) return s;
+  const bytes: number[] = [];
+  let pairs = 0;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === '\u0420' || ch === '\u0421') { // Р (0xD0) / С (0xD1) — lead-байты UTF-8 кириллицы
+      const next = CP1251_REV.get(s[i + 1]);
+      if (next === undefined || next < 0x80 || next > 0xbf) return s;
+      bytes.push(ch === '\u0420' ? 0xd0 : 0xd1, next);
+      i++; pairs++;
+    } else {
+      const code = ch.codePointAt(0)!;
+      if (code > 0x7f) return s;
+      bytes.push(code);
+    }
+  }
+  if (!pairs) return s;
+  return new TextDecoder('utf-8').decode(new Uint8Array(bytes));
+}

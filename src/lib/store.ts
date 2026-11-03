@@ -21,7 +21,7 @@ import type {Supplier,
 import { useEffect, useState } from 'react';
 import {DEFAULT_STATUSES, DEFAULT_LEAD_STATUSES, DEFAULT_TASK_ENTITY_TYPES, SYSTEM_TASK_TYPE, CONTACT_PREFS, DEFAULT_SUPPLIER_GREETING, DEFAULT_FORM_CONFIGS, DEFAULT_TASK_TYPES, DEFAULT_FORM_CONSENT} from '@/constants';
 import { EMPTY_ACCESS } from '@/types';
-import { generateId } from './utils';
+import { fixMojibake, generateId } from './utils';
 import {
   pullRemoteSnapshot,
   saveSettings,
@@ -426,6 +426,11 @@ settings.taskTypes = Array.from(new Set([...(settings.taskTypes || []).filter((t
       // v1.35.3-fix8_14: оператор ЛК, привязанный к легаси-админу, тоже терял матчинг с responsible_id
       const opFix = (settings.lkOperators || []).map(o => o.userId === LEGACY_ADMIN_ID ? { ...o, userId: ADMIN_ID } : o);
       if (opFix.some((o, i) => o !== (settings.lkOperators || [])[i])) settings.lkOperators = opFix;
+    }
+    // v1.35.3-fix8_15: титул кабинета, сохранённый в двойной кодировке
+    if (typeof settings.cabinetTitle === 'string') {
+      const fixedTitle = fixMojibake(settings.cabinetTitle);
+      if (fixedTitle !== settings.cabinetTitle) settings.cabinetTitle = fixedTitle;
     }
 
     const STATUS_RENAMES: Record<string, string> = {

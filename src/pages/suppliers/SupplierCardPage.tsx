@@ -240,7 +240,8 @@ if (form.status !== freshSupplier.status) history.push(makeHistoryEntry('status'
     if (!whForm.city.trim()) { toast.error('Укажите город'); return; }
     if (!whForm.address?.trim()) { toast.error('Укажите адрес склада'); return; } // ТЗ v1.25.0: адрес обязателен
     if (!freshSupplier.multiWarehouse && (freshSupplier.warehouseLocations || []).length >= 1) {
-      toast.error('Мультисклад выключен — нельзя добавить больше 1 склада. Включите «Мультисклад» переключателем слева от кнопки.');
+      setWhForm({ city: '', address: '', skuCount: 0, verified: false }); setNewWarehouse(false); // v1.35.3-fix8_15: как в проценке — форма закрывается, уведомление внизу экрана
+      toast.error('Для включения функции Мультисклад обратитесь в поддержку, это бесплатно');
       return;
     }
     const loc: WarehouseLocation = { id: generateId(), city: whForm.city.trim(), address: whForm.address?.trim() || '', skuCount: whForm.skuCount || 0, status: 'Новый', verified: false }; // статус «Новый» ставит система

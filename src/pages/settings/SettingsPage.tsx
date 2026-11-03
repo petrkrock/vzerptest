@@ -1962,7 +1962,7 @@ const [tab, setTab] = useState('Статусы');
           )}
 
           {/* v1.30.103: ТИТУЛ ДЛЯ КАБИНЕТА */}
-          {lkTab === 'titul' && (
+          {tab === 'ЛК Поставщик' && lkTab === 'titul' && (
             <div className="card-base p-4 space-y-3">
               <h3 className="section-title">Титул для кабинета</h3>
               <p className="text-xs text-gray-400">Заголовок, который поставщик видит в верхней части своего кабинета (ЛК → Кабинет).</p>
