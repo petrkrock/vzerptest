@@ -423,6 +423,9 @@ settings.taskTypes = Array.from(new Set([...(settings.taskTypes || []).filter((t
       parsed.suppliers = fixResp(parsed.suppliers || []);
       parsed.buyers = fixResp(parsed.buyers || []);
       parsed.tasks = fixResp(parsed.tasks || []);
+      // v1.35.3-fix8_14: оператор ЛК, привязанный к легаси-админу, тоже терял матчинг с responsible_id
+      const opFix = (settings.lkOperators || []).map(o => o.userId === LEGACY_ADMIN_ID ? { ...o, userId: ADMIN_ID } : o);
+      if (opFix.some((o, i) => o !== (settings.lkOperators || [])[i])) settings.lkOperators = opFix;
     }
 
     const STATUS_RENAMES: Record<string, string> = {

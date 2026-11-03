@@ -290,6 +290,9 @@ export default function SupplierServicePage() {
       if (r.ok && d?.dashboard?.lkLinks) setLkLinksMap(d.dashboard.lkLinks as Record<string, string>);
       if (r.ok && d?.lkOperator !== undefined) setLkOp(d.lkOperator);
       if (r.ok && d?.dashboard) { setDash(d.dashboard); setData((prev: Record<string, unknown> | null) => prev && prev.phone !== d.phone ? { ...prev, phone: d.phone } : prev); } // v1.30.94: стабильная ссылка — без петли эффектов
+      // v1.35.3-fix8_14: серверные warehouses/multiWarehouse в data — иначе проверка лимита мультисклада видела протухшие данные
+      if (r.ok && d?.warehouses !== undefined) setData((prev: Record<string, unknown> | null) => prev ? { ...prev, warehouses: d.warehouses } : prev);
+      if (r.ok && d?.multiWarehouse !== undefined) setData((prev: Record<string, unknown> | null) => prev ? { ...prev, multiWarehouse: d.multiWarehouse } : prev);
       if (r.ok && d?.cabinet) setCabinet(d.cabinet);
     } catch { /* останется null — покажем «—» */ }
   }
@@ -681,7 +684,7 @@ export default function SupplierServicePage() {
                         const errs: Record<string, boolean> = { city: !whCity.trim(), address: !whAddress.trim(), sku: !whSku.trim() };
                         setWhErr(errs);
                         if (errs.city || errs.address || errs.sku) { setNotice('Заполните все поля'); return; }
-                        if (!editingWhId && !data?.multiWarehouse && (data?.warehouses || []).length >= 1) { setNotice('Мультисклад не подключён. Для добавления второго склада обратитесь в поддержку.'); return; }
+                        if (!editingWhId && !data?.multiWarehouse && (data?.warehouses || []).length >= 1) { setNotice('Для включения функции Мультисклад обратитесь в поддержку, это бесплатно'); return; }
                         await addWarehouse();
                         setWhModal(false); setWhErr({}); setEditingWhId(null);
                       }} className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors">Сохранить</button>
@@ -1067,7 +1070,7 @@ export default function SupplierServicePage() {
                           <span className="relative">
                             <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${STATUS_STYLE[String(p.status)] || 'bg-amber-100 text-amber-700'}`}>{String(p.status || '—')}</span>
                           </span>
-                          <span className="text-[11px] text-gray-400 whitespace-nowrap font-normal">{p.start_date && p.end_date ? `${String(p.start_date).split('-').reverse().join('.')} — ${String(p.end_date).split('-').reverse().join('.')}` : 'дата не назначена'}</span>
+                          <span className="text-[11px] text-gray-400 whitespace-nowrap font-normal">{p.start_date && p.end_date ? `${String(p.start_date).slice(0, 10).split('-').reverse().join('.')} — ${String(p.end_date).slice(0, 10).split('-').reverse().join('.')}` : 'дата не назначена'}</span>
                           {/* v1.30.83: hover — фон темнее; если материал есть — видно по кнопке */}
                           {/* v1.30.84: добавлен — просто зелёный фон, без галочки и выделения */}
                           <button type="button" onClick={() => { setMaterialModalId(String(p.id)); setMatDesc(''); setMatImage(''); }}
