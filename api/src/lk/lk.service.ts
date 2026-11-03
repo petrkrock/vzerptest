@@ -43,6 +43,33 @@ interface SupplierRow {
   price_email?: string;
 }
 
+
+// v1.35.3-fix8_14: заголовок, сохранённый в двойной кодировке (UTF-8, прочитанный как windows-1251):
+// "Р'ЃРµСЂРІРёСЃ..." -> "Сервис...". Идемпотентно — чистый текст не трогает.
+const CP1251 = new TextDecoder('windows-1251');
+const CP1251_REV = new Map<string, number>();
+for (let b = 0x80; b <= 0xff; b++) CP1251_REV.set(CP1251.decode(new Uint8Array([b])), b);
+function fixMojibake(s: string): string {
+  if (!s) return s;
+  const bytes: number[] = [];
+  let pairs = 0;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === '\u0420' || ch === '\u0421') { // Р (0xD0) / С (0xD1) — lead-байты UTF-8 кириллицы
+      const next = CP1251_REV.get(s[i + 1]);
+      if (next === undefined || next < 0x80 || next > 0xbf) return s; // не мохибейк-пара
+      bytes.push(ch === '\u0420' ? 0xd0 : 0xd1, next);
+      i++; pairs++;
+    } else {
+      const code = ch.codePointAt(0)!;
+      if (code > 0x7f) return s; // не-ASCII вне пар — не наш случай
+      bytes.push(code);
+    }
+  }
+  if (!pairs) return s;
+  return Buffer.from(bytes).toString('utf8');
+}
+
 @Injectable()
 export class LkService {
   constructor(
@@ -264,7 +291,6 @@ export class LkService {
         c.query(`SELECT id, status FROM public.media_records WHERE id = $1 AND supplier_id = $2 LIMIT 1`, [recordId, supplier.id]),
       );
       if (!found[0]) throw new BadRequestException('Заявка не найдена');
-      if (String(found[0].status || '') !== 'Активный') throw new BadRequestException('Материалы можно приложить только к активной заявке');
       const { rows: recRows } = await this.db.withAdmin(c =>
         c.query(`SELECT history FROM public.media_records WHERE id = $1`, [recordId]),
       );
@@ -402,7 +428,7 @@ export class LkService {
         title: String(domain.title || ''),
         greeting: String(domain.greeting || ''),
       } : null,
-      cabinetTitle: String(settings.cabinetTitle || ''),
+      cabinetTitle: fixMojibake(String(settings.cabinetTitle || '')),
       // Сервисы продаж: публичные имена из справочника CRM.
       services: ((settings.supplierServices || []) as Array<Record<string, unknown>>)
         .map(x => ({ code: String(x.name || ''), label: String(x.publicName || x.name || '') })),
