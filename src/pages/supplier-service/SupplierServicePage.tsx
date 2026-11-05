@@ -638,7 +638,7 @@ export default function SupplierServicePage() {
           <div className="space-y-4 w-full max-w-[1160px]" style={{ maxWidth: 1160 }}>
 
             {/* ШАПКА ЛК: логотип + Продвижение/Выход */}
-            <div className="bg-white border border-gray-200 rounded-2xl shadow-sm px-4 sm:px-5 py-3 flex items-center justify-between gap-3 flex-wrap">
+            <div className="bg-white rounded-2xl shadow-[0_3px_6px_rgba(161,161,161,0.3)] px-4 sm:px-5 py-3 flex items-center justify-between gap-3 flex-wrap">
               <button type="button" onClick={() => setLkTab('dashboard')} title="На дашборд" className="shrink-0">
                 <img src="/logo.png" alt="ВСЕМЗАПЧАСТИ" className="w-[130px] sm:w-[180px] h-auto" />
               </button>
@@ -724,11 +724,11 @@ export default function SupplierServicePage() {
                     <div className="h-full flex flex-col">
                       {banner.image ? (
                         <a href={banner.link || undefined} target={banner.link ? '_blank' : undefined} rel="noreferrer"
-                          className="block bg-white border border-gray-200 rounded-2xl overflow-hidden w-full flex-1 min-h-0">
+                          className="block bg-white rounded-2xl overflow-hidden w-full flex-1 min-h-0">
                           <img src={banner.image} alt="Баннер" className="w-full h-full object-cover" />
                         </a>
                       ) : (
-                        <div className="bg-white border border-gray-200 rounded-2xl w-full flex-1 min-h-40 flex items-center justify-center">
+                        <div className="bg-white rounded-2xl w-full flex-1 min-h-40 flex items-center justify-center">
                           <p className="text-gray-300 font-bold text-3xl tracking-widest select-none">БАННЕР</p>
                         </div>
                       )}
@@ -736,7 +736,7 @@ export default function SupplierServicePage() {
 
                     {/* VZ ЧАТ */}
                     <div>
-                      <div className="bg-white border border-gray-200 rounded-2xl p-5 pt-[1.85rem] space-y-3 h-full relative">
+                      <div className="bg-white rounded-2xl p-5 pt-[1.85rem] space-y-3 h-full relative">
                         <div className="flex items-center justify-between gap-2">
                           <h3 className="text-base font-bold text-gray-900">ВЗ ЧАТ</h3>
                           <a href="https://vsemzapchasti.ru/support" target="_blank" rel="noreferrer" title="Поддержка"
@@ -793,7 +793,7 @@ export default function SupplierServicePage() {
                     </div>
                                         {/* СВОДКА ПО ПОСТАВЩИКУ */}
                     <div>
-                      <div className="relative overflow-hidden bg-white border border-gray-200 rounded-2xl p-5 h-full">
+                      <div className="relative overflow-hidden bg-white rounded-2xl p-5 h-full">
                         <div className="absolute inset-0 opacity-[0.5] pointer-events-none"
                           style={{ backgroundImage: 'linear-gradient(#f1f5f9 1px, transparent 1px), linear-gradient(90deg, #f1f5f9 1px, transparent 1px)', backgroundSize: '28px 28px' }} />
                         <div className="relative space-y-4">
@@ -868,7 +868,7 @@ export default function SupplierServicePage() {
                   </div>
 
                   {/* СЧЁТЧИКИ — B2B-дашборд */}
-                  <div className="relative overflow-hidden rounded-2xl bg-white border border-gray-200 ">
+                  <div className="relative overflow-hidden rounded-2xl bg-white ">
                     <div className="absolute inset-0 opacity-[0.5] pointer-events-none"
                       style={{ backgroundImage: 'linear-gradient(#f1f5f9 1px, transparent 1px), linear-gradient(90deg, #f1f5f9 1px, transparent 1px)', backgroundSize: '28px 28px' }} />
                     <div className="relative px-6 py-5">
@@ -995,7 +995,7 @@ export default function SupplierServicePage() {
             {lkTab === 'promo' && (
               <div className="space-y-4">
                 {/* Блок 1: Договор — v1.30.79: без заголовка, «не найден» в одну строку с кнопками */}
-                <div className="bg-white border border-gray-200 rounded-2xl p-5">
+                <div className="bg-white rounded-2xl p-5">
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     {promoContract ? (
                       <div className="flex flex-wrap gap-x-8 gap-y-1 text-sm">
@@ -1021,7 +1021,7 @@ export default function SupplierServicePage() {
                 </div>
                 {/* Блок 2: Форматы — белая подложка, сдержанный стиль (v1.30.70); v1.30.80: тумблер «Мои» */}
                 {!showMyNews && (<>
-                <div className="bg-white border border-gray-200 rounded-2xl p-5">
+                <div className="bg-white rounded-2xl p-5">
                   <div className="flex items-center justify-between mb-3">
                     <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Рекламные форматы</p>
                     {/* v1.30.76: ссылка «Подробнее про форматы» из Ссылки офер */}
@@ -1049,7 +1049,7 @@ export default function SupplierServicePage() {
   </div>
 
                 {/* v1.30.78: Рекламные размещения — отдельная подложка, фон как у условий DBS */}
-                <div className="relative bg-white border border-gray-200 rounded-2xl p-5 sm:p-6 h-full">
+                <div className="relative bg-white rounded-2xl p-5 sm:p-6 h-full">
                   <div className="flex items-center justify-between mb-3">
                     <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Рекламные размещения</p>
                     {/* v1.30.84: справка по статусам — кнопка в шапке блока */}
@@ -1306,7 +1306,7 @@ export default function SupplierServicePage() {
 
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     {/* СОЗДАНИЕ СКЛАДА */}
-                    <div className="bg-white border border-gray-200 rounded-2xl p-5 space-y-3">
+                    <div className="bg-white rounded-2xl p-5 space-y-3">
                       <div className="flex items-center justify-between gap-2">
                         <h3 className="text-sm font-semibold text-gray-600">Создание склада в системе</h3>
                         <span className="relative inline-block">
@@ -1366,7 +1366,7 @@ export default function SupplierServicePage() {
                   </div>
 
                   {/* МОИ СКЛАДЫ */}
-                  <div className="bg-white border border-gray-200 rounded-2xl p-5 space-y-3">
+                  <div className="bg-white rounded-2xl p-5 space-y-3">
                     <h3 className="text-sm font-semibold text-gray-600">Мои склады</h3>
                     {whs.length ? (
                       <div className="space-y-2">
@@ -1434,7 +1434,7 @@ export default function SupplierServicePage() {
                     </div>
                   </div>
                   {/* О ПОСТАВЩИКЕ */}
-                  <div className="relative overflow-hidden bg-white border border-gray-200 rounded-2xl p-5">
+                  <div className="relative overflow-hidden bg-white rounded-2xl p-5">
                     <div className="absolute inset-0 opacity-[0.5] pointer-events-none"
                       style={{ backgroundImage: 'linear-gradient(#f1f5f9 1px, transparent 1px), linear-gradient(90deg, #f1f5f9 1px, transparent 1px)', backgroundSize: '28px 28px' }} />
                     <div className="relative">
@@ -1455,7 +1455,7 @@ export default function SupplierServicePage() {
                   </div>
 
                   {/* АССОРТИМЕНТ */}
-                  <div className="bg-white border border-gray-200 rounded-2xl p-5 space-y-3">
+                  <div className="bg-white rounded-2xl p-5 space-y-3">
                     <h3 className="text-sm font-semibold text-gray-600">Ассортимент</h3>
                     <div>
                       <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Основные группы товаров</p>
@@ -1474,7 +1474,7 @@ export default function SupplierServicePage() {
                   </div>
 
                   {/* АКТИВНЫЕ СЕРВИСЫ */}
-                  <div className="bg-white border border-gray-200 rounded-2xl p-5 space-y-3">
+                  <div className="bg-white rounded-2xl p-5 space-y-3">
                     <h3 className="text-sm font-semibold text-gray-600">Активные сервисы продаж</h3>
                     <div className="flex flex-wrap gap-1.5">
                       {svc.map(s => (
@@ -1491,7 +1491,7 @@ export default function SupplierServicePage() {
                   </div>
 
                   {/* КОНТАКТЫ ПРЕДСТАВИТЕЛЯ — редактируемо */}
-                  <div className="bg-white border border-gray-200 rounded-2xl p-5 space-y-3">
+                  <div className="bg-white rounded-2xl p-5 space-y-3">
                     <div className="flex items-start justify-between gap-2">
                       <h3 className="text-sm font-semibold text-gray-600">Представитель поставщика</h3>
                       {!cabEdit ? (
@@ -1535,7 +1535,7 @@ export default function SupplierServicePage() {
             {lkTab === 'pricing' && (<>
             {/* ШАГ 1: СОЗДАТЬ СКЛАД + КАРТОЧКА КОМПАНИИ */}
                         {/* МОИ СКЛАДЫ */}
-            <div className="relative bg-white border border-gray-200 rounded-2xl p-5 sm:p-6 h-full">
+            <div className="relative bg-white rounded-2xl p-5 sm:p-6 h-full">
               <div className="flex items-start justify-between gap-3 mb-3">
                 <h2 className="text-base font-semibold text-gray-800">Мои склады ({(data.warehouses || []).length})</h2>
                 <div className="flex items-center gap-2 flex-wrap">
@@ -1586,7 +1586,7 @@ export default function SupplierServicePage() {
             </div>
 
             {/* ДОСТУПНЫЕ ГОРОДА — список показываем всегда; условия требуют склад */}
-            <div className="relative bg-white border border-gray-200 rounded-2xl p-5 sm:p-6 h-full">
+            <div className="relative bg-white rounded-2xl p-5 sm:p-6 h-full">
               <div className="flex items-start justify-between gap-3 flex-wrap">
                 <h2 className="text-base font-semibold text-gray-800">Доступные города</h2>
                 <div className="flex items-center gap-2">
@@ -1825,7 +1825,7 @@ export default function SupplierServicePage() {
 
             {/* УСЛОВИЯ СЕРВИСА ПОИСКА (DBS) — таблица условий */}
             {(data.serviceSearch || []).length > 0 && (
-              <div className="relative bg-white border border-gray-200 rounded-2xl p-5 sm:p-6 h-full">
+              <div className="relative bg-white rounded-2xl p-5 sm:p-6 h-full">
                 <div className="flex items-start justify-between gap-3 flex-wrap mb-3">
                   <h2 className="text-base font-semibold text-gray-800">Условия сервиса проценки</h2>
                   <div className="flex items-center gap-2">
