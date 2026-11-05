@@ -5,7 +5,7 @@ import { API_URL } from '@/lib/api';
 import { fixMojibake } from '@/lib/utils';
 import { uploadLkFile } from '@/lib/lk-upload'; // v1.30.76: загрузка картинок (импорт отсутствовал)
 import { toast } from 'sonner'; // v1.30.76: toast был не определён — модалки не закрывались
-import { AlertCircle, Boxes, Check, ChevronDown, Copy, Headset, Info, LayoutDashboard, LogOut, Megaphone, Pencil, Plus, Search, Trash2, Truck, Warehouse, X } from 'lucide-react';
+import { AlertCircle, Check, ChevronDown, Copy, Headset, Info, LayoutDashboard, LogOut, Pencil, Plus, Trash2, Truck, Warehouse, X } from 'lucide-react';
 
 interface Wh { id: string; city: string; skuCount: number; verified?: boolean; address?: string; status?: 'Новый' | 'Проверен' | 'Заморожен'; } // ТЗ v1.25.0: +адрес, +статус
 interface Cond { city: string; warehouseName: string; representative: string; contacts: string;
@@ -31,12 +31,13 @@ const EMPTY_COND: Cond = { city: '', warehouseName: '', representative: '', cont
  * Сценарий: сначала склады → потом условия сервиса поиска (склад — из
  * выпадающего списка добавленных складов). Защита: токен + опциональный PIN.
  */
-const LK_MENU = [
+// v1.35.5: у пунктов с текстом убраны svg-иконки — оставлен только текст
+const LK_MENU: { key: 'dashboard' | 'pricing' | 'crossdock' | 'promo'; label: string; icon?: typeof LayoutDashboard }[] = [
   { key: 'dashboard', label: '', icon: LayoutDashboard },
-  { key: 'pricing', label: 'Проценка', icon: Search },
-  { key: 'crossdock', label: 'Маркет', icon: Boxes },
-  { key: 'promo', label: 'Продвижение', icon: Megaphone },
-] as const;
+  { key: 'pricing', label: 'Проценка' },
+  { key: 'crossdock', label: 'Маркет' },
+  { key: 'promo', label: 'Продвижение' },
+];
 
 export default function SupplierServicePage() {
   const { token = '' } = useParams<{ token: string }>();
@@ -590,7 +591,7 @@ export default function SupplierServicePage() {
   const pinScreen = !loading && !fatal && data && !pinPassed;
 
   return (
-    <div className={`min-h-screen bg-[#f5f5f5] flex ${pinScreen ? 'items-center' : 'items-start'} justify-center p-3 sm:p-6 md:p-10`}>
+    <div className={`min-h-screen bg-[#f5f5f5] flex ${pinScreen ? 'items-center' : 'items-start'} justify-center p-3 sm:p-6`}>
       <div ref={wrapperRef} className={`w-full ${pinPassed ? 'max-w-[1160px]' : 'max-w-xl'} py-2`}>
         {loading && (
           <div className="bg-white border border-gray-200 rounded-2xl flex flex-col items-center justify-center gap-4 py-16 px-6">
@@ -647,7 +648,7 @@ export default function SupplierServicePage() {
                   {LK_MENU.map(m => (
                     <button key={m.key} type="button" onClick={() => setLkTab(m.key)}
                       className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${lkTab === m.key ? 'bg-red-600 text-white shadow-md' : 'text-gray-700 hover:bg-gray-200'}`}>
-                      <m.icon size={15} />{m.label ? ' ' + m.label : ''}
+                      {m.icon ? <m.icon size={15} /> : null}{m.label ? (m.icon ? ' ' : '') + m.label : ''}
                     </button>
                   ))}
                 </nav>
@@ -793,9 +794,7 @@ export default function SupplierServicePage() {
                     </div>
                                         {/* СВОДКА ПО ПОСТАВЩИКУ */}
                     <div>
-                      <div className="relative overflow-hidden bg-white rounded-2xl p-5 h-full">
-                        <div className="absolute inset-0 opacity-[0.5] pointer-events-none"
-                          style={{ backgroundImage: 'linear-gradient(#f1f5f9 1px, transparent 1px), linear-gradient(90deg, #f1f5f9 1px, transparent 1px)', backgroundSize: '28px 28px' }} />
+                      <div className="relative bg-white rounded-2xl p-5 h-full">
                         <div className="relative space-y-4">
                         <button type="button" onClick={() => setLkTab('cabinet')} title="Личный кабинет"
                         className="w-full flex items-center justify-between gap-3 bg-gray-100 hover:bg-gray-200 rounded-xl px-4 py-2.5 transition-colors text-left">
@@ -868,9 +867,7 @@ export default function SupplierServicePage() {
                   </div>
 
                   {/* СЧЁТЧИКИ — B2B-дашборд */}
-                  <div className="relative overflow-hidden rounded-2xl bg-white ">
-                    <div className="absolute inset-0 opacity-[0.5] pointer-events-none"
-                      style={{ backgroundImage: 'linear-gradient(#f1f5f9 1px, transparent 1px), linear-gradient(90deg, #f1f5f9 1px, transparent 1px)', backgroundSize: '28px 28px' }} />
+                  <div className="relative rounded-2xl bg-white">
                     <div className="relative px-6 py-5">
                       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-x-6 gap-y-5">
                         {[
@@ -885,7 +882,7 @@ export default function SupplierServicePage() {
                               {m.value.toLocaleString('ru-RU')}
                             </p>
                             <p className="mt-1.5 text-[10px] font-medium uppercase tracking-wider text-gray-400 leading-tight">{m.label}</p>
-                            <span className="absolute -left-px top-0 h-5 w-[2px] bg-red-500 rounded-full" style={{ opacity: 0.35 + i * 0.12 }} />
+                            <span className="absolute -left-px top-0 h-5 w-[2px] bg-gray-700 rounded-full" style={{ opacity: 0.35 + i * 0.12 }} />
                           </div>
                         ))}
                       </div>
@@ -1102,7 +1099,7 @@ export default function SupplierServicePage() {
 
                 {/* v1.30.80: Мои новости — дизайн как «Рекламные размещения» */}
                 {showMyNews && (
-                  <div className="relative bg-white border border-gray-200 rounded-2xl p-5 sm:p-6 h-full">
+                  <div className="relative bg-white rounded-2xl p-5 sm:p-6 h-full">
                     <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">Мои новости</p>
                     {myNews.length ? (
                       <div className="space-y-2">
@@ -1434,9 +1431,7 @@ export default function SupplierServicePage() {
                     </div>
                   </div>
                   {/* О ПОСТАВЩИКЕ */}
-                  <div className="relative overflow-hidden bg-white rounded-2xl p-5">
-                    <div className="absolute inset-0 opacity-[0.5] pointer-events-none"
-                      style={{ backgroundImage: 'linear-gradient(#f1f5f9 1px, transparent 1px), linear-gradient(90deg, #f1f5f9 1px, transparent 1px)', backgroundSize: '28px 28px' }} />
+                  <div className="relative bg-white rounded-2xl p-5">
                     <div className="relative">
                       <div className="flex items-center justify-between gap-2 mb-2">
                         <h3 className="text-sm font-semibold text-gray-600">О поставщике</h3>
