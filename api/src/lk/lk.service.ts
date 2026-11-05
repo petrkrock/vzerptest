@@ -93,6 +93,7 @@ export class LkService {
       warehouses: supplier.warehouse_locations || [],
       availableCities,
       syncVersion: await this.getSyncVersion(supplier),
+      cabinetTitle: fixMojibake(String((await this.readSettings()).cabinetTitle || '')), // v1.35.3-fix8_18: титул с экрана ввода пина
     };
   }
 
@@ -118,6 +119,10 @@ export class LkService {
       if (typeof checked === 'string') throw new BadRequestException(checked);
       let next = checked as Array<Record<string, unknown>>;
       if ((await this.readMultiwarehouse(supplier.id)) === false) {
+        if (next.length > 1 && prev.length <= 1) {
+          // v1.35.3-fix8_18: без мультисклада второй склад нельзя — точный отказ с текстом ТЗ (уведомление в ЛК гарантировано)
+          throw new BadRequestException('Для включения функции Мультисклад обратитесь в поддержку, это бесплатно');
+        }
         const first = next.find(w => prev.some(p => p.id === w.id)) ||
           next.find(w => String(w.status || '') === 'Проверен') || next[0];
         next = first ? [first] : [];
