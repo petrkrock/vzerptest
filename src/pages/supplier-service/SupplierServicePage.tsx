@@ -2,6 +2,7 @@ import { APP_VERSION } from '@/constants';
 import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { API_URL } from '@/lib/api';
+import { fixMojibake } from '@/lib/utils';
 import { uploadLkFile } from '@/lib/lk-upload'; // v1.30.76: загрузка картинок (импорт отсутствовал)
 import { toast } from 'sonner'; // v1.30.76: toast был не определён — модалки не закрывались
 import { AlertCircle, Boxes, Check, ChevronDown, Copy, Headset, Info, LayoutDashboard, LogOut, Megaphone, Pencil, Plus, Search, Trash2, Truck, Warehouse, X } from 'lucide-react';
@@ -283,8 +284,8 @@ export default function SupplierServicePage() {
       if (r.ok && Array.isArray(d?.adFormats)) setAdFormats(d.adFormats);
       if (r.ok && Array.isArray(d?.myNews)) setMyNews(d.myNews);
       // v1.31.11: титул домена в приоритете, иначе общий cabinetTitle
-      if (r.ok && d?.lkDomain?.title) setCabTitle(String(d.lkDomain.title));
-      else if (r.ok && d?.cabinetTitle !== undefined) setCabTitle(String(d.cabinetTitle));
+      if (r.ok && d?.lkDomain?.title) setCabTitle(fixMojibake(String(d.lkDomain.title)));
+      else if (r.ok && d?.cabinetTitle !== undefined) setCabTitle(fixMojibake(String(d.cabinetTitle)));
       if (r.ok && Array.isArray(d?.services)) setAdServices(d.services);
       if (r.ok && Array.isArray(d?.placements)) setPlacements(d.placements);
       if (r.ok && d?.dashboard?.lkLinks) setLkLinksMap(d.dashboard.lkLinks as Record<string, string>);
@@ -684,7 +685,7 @@ export default function SupplierServicePage() {
                         const errs: Record<string, boolean> = { city: !whCity.trim(), address: !whAddress.trim(), sku: !whSku.trim() };
                         setWhErr(errs);
                         if (errs.city || errs.address || errs.sku) { setNotice('Заполните все поля'); return; }
-                        if (!editingWhId && !data?.multiWarehouse && (data?.warehouses || []).length >= 1) { setNotice('Для включения функции Мультисклад обратитесь в поддержку, это бесплатно'); return; }
+                        if (!editingWhId && !data?.multiWarehouse && (data?.warehouses || []).length >= 1) { setNotice('Для включения функции Мультисклад обратитесь в поддержку, это бесплатно'); setWhModal(false); setWhErr({}); setEditingWhId(null); return; } // v1.35.3-fix8_17: как в ТЗ — модалка закрывается, уведомление внизу экрана
                         await addWarehouse();
                         setWhModal(false); setWhErr({}); setEditingWhId(null);
                       }} className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors">Сохранить</button>
