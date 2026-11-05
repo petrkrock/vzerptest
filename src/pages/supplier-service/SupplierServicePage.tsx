@@ -286,7 +286,7 @@ export default function SupplierServicePage() {
       if (r.ok && Array.isArray(d?.adFormats)) setAdFormats(d.adFormats);
       if (r.ok && Array.isArray(d?.myNews)) setMyNews(d.myNews);
       // v1.31.11: титул домена в приоритете, иначе общий cabinetTitle
-      if (r.ok && d?.lkDomain?.title) setCabTitle(fixMojibake(String(d.lkDomain?.title || d.cabinetTitle || ''))); // v1.35.3-fix8_18: приоритет домену, но пустой домен -> общий титул из настроек
+      if (r.ok && d?.lkDomain?.title) setCabTitle(fixMojibake(String(d.cabinetTitle || d.lkDomain?.title || ''))); // v1.35.3-fix8_19: титул из «Настройки → ЛК Поставщик → Титул» в приоритете, домен — запасной
       else if (r.ok && d?.cabinetTitle !== undefined) setCabTitle(fixMojibake(String(d.cabinetTitle)));
       if (r.ok && Array.isArray(d?.services)) setAdServices(d.services);
       if (r.ok && Array.isArray(d?.placements)) setPlacements(d.placements);
@@ -660,7 +660,17 @@ export default function SupplierServicePage() {
 
             {/* МЕНЮ КАБИНЕТА */}
             {/* МОДАЛКА ДОБАВЛЕНИЯ СКЛАДА (v1.30.0) */}
-            {whModal && (
+            
+        {notice && (
+                  <div className="fixed inset-x-0 bottom-6 z-50 flex justify-center px-4 pointer-events-none">
+                    <div className={`w-full max-w-[420px] text-sm font-medium px-4 py-3 rounded-xl shadow-lg border text-center ${notice.startsWith('✓')
+                      ? 'bg-green-600 text-white border-green-600 shadow-green-200'
+                      : 'bg-red-600 text-white border-red-600 shadow-red-200'}`}>
+                      {notice}
+                    </div>
+                  </div>
+                )}
+{whModal && (
               <div className="fixed inset-0 z-40 bg-black/75 flex items-center justify-center p-3 sm:p-6" onClick={() => setWhModal(false)}>
                 <div className="w-full max-w-lg rounded-2xl shadow-2xl ring-1 ring-white/40 border border-white/30" onClick={e => e.stopPropagation()}>
                   <div className="bg-gray-50 border border-gray-200 rounded-2xl p-5 sm:p-6 space-y-4">
@@ -1645,15 +1655,7 @@ export default function SupplierServicePage() {
             {/* ТЗ v1.23.12: уведомления — всегда под блоком «Доступные города» */}
             {/* ТЗ v1.23.55: всплывающий тост справа сверху вместо полоски в потоке */}
             {/* ТЗ v1.25.19: центровка через flex — анимация больше не «отбирает» transform и тост не прыгает */}
-            {notice && (
-              <div className="fixed inset-x-0 bottom-6 z-50 flex justify-center px-4 pointer-events-none">
-                <div className={`w-full max-w-[420px] text-sm font-medium px-4 py-3 rounded-xl shadow-lg border text-center ${notice.startsWith('✓')
-                  ? 'bg-green-600 text-white border-green-600 shadow-green-200'
-                  : 'bg-red-600 text-white border-red-600 shadow-red-200'}`}>
-                  {notice}
-                </div>
-              </div>
-            )}
+            
 
             {/* ШАГ 3: ОКНО «УСЛОВИЯ СЕРВИСА ПОИСКА» — открывается после выбора города */}
             {editorOpen && (data.warehouses || []).length > 0 && (
