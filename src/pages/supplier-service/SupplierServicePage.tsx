@@ -170,7 +170,9 @@ export default function SupplierServicePage() {
         contactEmail: d.contactEmail ?? prev.contactEmail,
         multiWarehouse: d.multiWarehouse ?? prev.multiWarehouse,
         status: d.status ?? prev.status,
-      } : d); if (sessionStorage.getItem('dbs_pin_ok') !== '1') setPinPassed(false); } }) // ТЗ v1.23.41: МЕРДЖ — иначе GET затирал условия после F5
+        cabinetTitle: d.cabinetTitle ?? prev.cabinetTitle, // v1.35.3-fix8_18: титул с экрана ввода пина
+      } : d); if (typeof d?.cabinetTitle === 'string' && d.cabinetTitle) setCabTitle(fixMojibake(d.cabinetTitle)); // титул до ввода пина
+      if (sessionStorage.getItem('dbs_pin_ok') !== '1') setPinPassed(false); } }) // ТЗ v1.23.41: МЕРДЖ — иначе GET затирал условия после F5
       .catch(() => setFatal('Не удалось загрузить данные'))
       .finally(() => setLoading(false));
   }, [token]);
@@ -284,7 +286,7 @@ export default function SupplierServicePage() {
       if (r.ok && Array.isArray(d?.adFormats)) setAdFormats(d.adFormats);
       if (r.ok && Array.isArray(d?.myNews)) setMyNews(d.myNews);
       // v1.31.11: титул домена в приоритете, иначе общий cabinetTitle
-      if (r.ok && d?.lkDomain?.title) setCabTitle(fixMojibake(String(d.lkDomain.title)));
+      if (r.ok && d?.lkDomain?.title) setCabTitle(fixMojibake(String(d.lkDomain?.title || d.cabinetTitle || ''))); // v1.35.3-fix8_18: приоритет домену, но пустой домен -> общий титул из настроек
       else if (r.ok && d?.cabinetTitle !== undefined) setCabTitle(fixMojibake(String(d.cabinetTitle)));
       if (r.ok && Array.isArray(d?.services)) setAdServices(d.services);
       if (r.ok && Array.isArray(d?.placements)) setPlacements(d.placements);
