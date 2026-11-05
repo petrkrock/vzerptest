@@ -421,8 +421,8 @@ export class LkService {
       placements,
       lkDomain: domain ? {
         host: String(domain.host || ''),
-        title: String(domain.title || ''),
-        greeting: String(domain.greeting || ''),
+        title: fixMojibake(String(domain.title || '')),
+        greeting: fixMojibake(String(domain.greeting || '')),
       } : null,
       cabinetTitle: fixMojibake(String(settings.cabinetTitle || '')),
       // Сервисы продаж: публичные имена из справочника CRM.
