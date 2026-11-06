@@ -13,8 +13,8 @@ export class AuthController {
     @Body() body: { email?: string; password?: string },
     @Req() req: { headers: Record<string, string | undefined>; ip?: string },
   ) {
-    // v1.34.0 (аудит #3): IP для rate-limit (5 попыток/5 мин на email+ip).
-    const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.ip || '';
+    // Реальный IP даёт Fastify (trustProxy в main.ts); заголовок x-forwarded-for клиент подделывает.
+    const ip = req.ip || '';
     return this.auth.login(body.email || '', body.password || '', ip);
   }
 }

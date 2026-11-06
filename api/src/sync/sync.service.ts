@@ -25,6 +25,8 @@ const ENTITY_TABLE: Record<SyncOp['entity'], string> = {
   tickets: 'public.tickets',
   mediaRecords: 'public.media_records',
 };
+// Ключи app_settings, которые может менять только администратор.
+const ADMIN_ONLY_SETTINGS = ['users', 'notifications', 'forms'] as const;
 const DOMAIN_TABLES = new Set(['public.suppliers', 'public.buyers']);
 const SOFT_DELETE_TABLES = new Set(Object.values(ENTITY_TABLE));
 
@@ -146,11 +148,21 @@ export class SyncService {
       throw new BadRequestException('Некорректные настройки');
     }
     return this.db.withClaims(user, async c => {
+      let next = settings as Record<string, unknown>;
+      if (user.role !== 'admin') {
+        // Не-админ (менеджер) не может менять пользователей/права, уведомления и формы:
+        // эти ключи берём из БД, а не из тела запроса (иначе — повышение прав через settings.users).
+        // Остальные настройки менеджеры по-прежнему сохраняют (миграции стора, справочники).
+        const { rows } = await c.query(`SELECT settings FROM public.app_settings WHERE id = 'global'`);
+        const current = (rows[0]?.settings ?? {}) as Record<string, unknown>;
+        next = { ...next };
+        for (const key of ADMIN_ONLY_SETTINGS) if (key in current) next[key] = current[key];
+      }
       await c.query(
         `INSERT INTO public.app_settings (id, settings)
          VALUES ('global', $1::jsonb)
          ON CONFLICT (id) DO UPDATE SET settings = EXCLUDED.settings, updated_at = now()`,
-        [JSON.stringify(settings)],
+        [JSON.stringify(next)],
       );
       await this.eventLog.record(c, { domain_id: user.domain_id, entity: 'settings', op: 'update', entity_id: 'global' });
       return { ok: true };

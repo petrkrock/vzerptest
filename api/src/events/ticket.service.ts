@@ -1,6 +1,8 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { DatabaseService, RequestUser } from '../database/database.service';
 
+const DEFAULT_DOMAIN_ID = '00000000-0000-4000-8000-000000000001';
+
 @Injectable()
 export class TicketService {
   constructor(private db: DatabaseService) {}
@@ -24,11 +26,11 @@ export class TicketService {
       ),
     );
     if (!srows[0]) throw new BadRequestException('Недействительная ссылка');
-    const supplier = srows[0] as { id: string; domain_id: string };
+    const supplier = srows[0] as { id: string; domain_id: string | null };
     const { rows } = await this.db.withAdmin(c =>
       c.query(
         `INSERT INTO sse_tickets (domain_id, supplier_id, expires_at) VALUES ($1, $2, now() + interval '5 minutes') RETURNING id`,
-        [supplier.domain_id, supplier.id],
+        [supplier.domain_id ?? DEFAULT_DOMAIN_ID, supplier.id], // NULL — у старых заявок с формы (см. миграцию 0011)
       ),
     );
     return { ticket: rows[0].id as string };

@@ -31,7 +31,7 @@ export class PublicController {
     @Req() req: { headers: Record<string, string | undefined>; ip?: string },
     @Headers('content-length') contentLength?: string,
   ) {
-    const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.ip || 'unknown';
+    const ip = req.ip || 'unknown'; // Fastify trustProxy (main.ts), не x-forwarded-for от клиента
     return this.forms.submit(
       parseType(body?.type),
       body,

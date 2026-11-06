@@ -1,6 +1,7 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { DatabaseService } from '../database/database.service';
+import { EventLogService } from '../events/event-log.service';
 import {
   ActiveField, CATEGORY_KEYS, DEFAULT_CONSENT, FormFieldConfig, PublicFormType,
   activeFields, buyerCategoryComments, resolveOptions,
@@ -24,6 +25,12 @@ const SITE_STATUS = 'Новый с сайта';
 const SITE_TICKET_STATUS = 'Новый запрос с формы';
 const SITE_SOURCE = 'Форма с сайта';
 const DEFAULT_SERVICE = 'DBS'; // ТЗ v1.22.41: поставщик с формы получает сервис продаж DBS
+
+// Единственный домен (single-tenant): заявки с публичных форм всегда попадают в него.
+// domain_id пишем ЯВНО — на боевой БД у колонки может не быть DEFAULT/NOT NULL (иначе NULL → ломается ЛК и realtime).
+const DEFAULT_DOMAIN_ID = '00000000-0000-4000-8000-000000000001';
+// Имена сущностей — как в /sync/ops (фронт по ним обновляет данные).
+const SYNC_ENTITY = { supplier: 'suppliers', buyer: 'buyers', ticket: 'tickets' } as const;
 
 const TABLES = { supplier: 'public.suppliers', buyer: 'public.buyers', ticket: 'public.tickets' } as const;
 const WHO = { supplier: 'Поставщик', buyer: 'Покупатель' } as const;
@@ -59,7 +66,7 @@ const isEmpty = (v: unknown) => v === undefined || v === null || v === '' || (Ar
 
 @Injectable()
 export class PublicService {
-  constructor(private db: DatabaseService) {}
+  constructor(private db: DatabaseService, private eventLog: EventLogService) {}
 
   private async loadForm(type: PublicFormType) {
     const { rows } = await this.db.withAdmin(c =>
@@ -162,7 +169,7 @@ export class PublicService {
       buyerType: str('type'), category: str('category'),
       contactPref: [clean.contactPref].flat().filter(Boolean).join(', '),
       contactName: str('contactName'), contactRole: str('contactRole'),
-      leadType: type, ip, date,
+      ip, date,
     };
 
     // Дедуп: запись НЕ создаётся, менеджеру уходит уведомление, посетителю — понятный отказ.
@@ -207,6 +214,7 @@ export class PublicService {
       };
     } else {
       row = {
+        domain_id: DEFAULT_DOMAIN_ID,
         type: clean.type,
         trade_name: clean.tradeName,
         city: clean.city,
@@ -236,13 +244,28 @@ export class PublicService {
 
     const cols = Object.keys(row).filter(k => row[k] !== undefined);
     try {
-      const { rows } = await this.db.withAdmin(c =>
-        c.query(
+      const id = await this.db.withAdmin(async c => {
+        const { rows } = await c.query(
           `INSERT INTO ${TABLES[type]} (${cols.join(', ')}) VALUES (${cols.map((_, i) => `$${i + 1}`).join(', ')}) RETURNING id`,
           cols.map(k => row[k]),
-        ),
-      );
-      return { id: String(rows[0].id), status };
+        );
+        const newId = String(rows[0].id);
+        // Событие синка → pg_notify → SSE: заявка появляется в CRM сразу, без F5 (так же пишет /sync/ops).
+        // Savepoint: сбой события не должен откатывать саму заявку.
+        await c.query('SAVEPOINT form_event');
+        try {
+          await this.eventLog.record(c, {
+            domain_id: DEFAULT_DOMAIN_ID,
+            supplier_id: type === 'supplier' ? newId : null,
+            entity: SYNC_ENTITY[type], op: 'create', entity_id: newId,
+          });
+        } catch (e) {
+          await c.query('ROLLBACK TO SAVEPOINT form_event');
+          console.error(JSON.stringify({ level: 'error', msg: 'public-form sync event failed', type, err: String(e) }));
+        }
+        return newId;
+      });
+      return { id, status };
     } catch (e) {
       console.error(JSON.stringify({ level: 'error', msg: 'public-form insert failed', type, err: String(e) }));
       throw fail('Не удалось сохранить заявку', HttpStatus.INTERNAL_SERVER_ERROR);

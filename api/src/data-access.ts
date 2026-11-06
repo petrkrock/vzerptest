@@ -4,7 +4,11 @@ import { DatabaseService, RequestUser } from './database/database.service';
 // v1.32.3: общий CRUD поверх таблицы с RLS. Модули (suppliers/buyers) подключают его
 // без дублирования кода. Расширение — только когда у сущности появится своя логика.
 const SAFE_COL = /^[a-z][a-z0-9_]*$/;
-const SYSTEM_COLS = new Set(['id', 'domain_id', 'deleted_at', 'created_at', 'updated_at']);
+// Служебные и защищённые колонки: клиент не может их записать через REST (токен/PIN ЛК, ЭДО-токен, признаки интеграций).
+const SYSTEM_COLS = new Set([
+  'id', 'domain_id', 'deleted_at', 'created_at', 'updated_at',
+  'service_access', 'pin', 'edo_token', 'edo_operator', 'from_api', 'created_by', 'external_id', 'external_source',
+]);
 
 function editableEntries(body: Record<string, unknown>): Array<[string, unknown]> {
   return Object.entries(body || {}).filter(

@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
+import { RateLimitGuard } from './common/rate-limit.guard';
 import { HealthModule } from './health/health.module';
 import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './auth/auth.module';
@@ -17,5 +19,7 @@ import { EventsModule } from './events/events.module';
 // v1.34.0: Supabase вырезан — все модули живут здесь (checko/files/logs — замена storage/edge).
 @Module({
   imports: [DatabaseModule, AuthModule, HealthModule, SuppliersModule, BuyersModule, LkModule, EmailModule, SyncModule, DomainsModule, PublicModule, CheckoModule, FilesModule, LogsModule, EventsModule],
+  // Глобальный лимит запросов с IP (выполняется до AuthGuard — анонимные перебор/парсинг режутся раньше).
+  providers: [{ provide: APP_GUARD, useClass: RateLimitGuard }],
 })
 export class AppModule {}
