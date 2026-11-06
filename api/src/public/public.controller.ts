@@ -1,5 +1,5 @@
-import { BadRequestException, Body, Controller, Get, Headers, Post, Query, Req } from '@nestjs/common';
-import { PublicService } from './public.service';
+import { Body, Controller, Get, Headers, Post, Query, Req } from '@nestjs/common';
+import { PublicService, fail } from './public.service';
 import { Public } from '../auth/public.decorator';
 import { PublicFormType } from './field-defs';
 
@@ -7,12 +7,12 @@ const TYPES: PublicFormType[] = ['supplier', 'buyer', 'ticket'];
 
 function parseType(raw: unknown): PublicFormType {
   const t = String(raw || '') as PublicFormType;
-  if (!TYPES.includes(t)) throw new BadRequestException('Неизвестный тип формы');
+  if (!TYPES.includes(t)) throw fail('Неизвестный тип формы');
   return t;
 }
 
-// v1.33.1: публичные формы лидов. Контракт — 1:1 как у edge function public-form:
-// GET /forms?type=…, POST /forms {type, …} — embed.js и PublicFormPage не менялись.
+// Публичные формы. Контракт — как у edge function public-form (v1.31.18):
+// GET /forms?type=…, POST /forms {type, values, consent, honeypot, renderedAt}.
 // Без JWT (публичные), rate-limit и антибот внутри сервиса.
 @Controller('forms')
 export class PublicController {

@@ -1,19 +1,36 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { DatabaseService } from '../database/database.service';
-import { FIELD_DEFS, DEFAULT_CONSENT, resolveOptions, PublicFormType } from './field-defs';
+import {
+  ActiveField, CATEGORY_KEYS, DEFAULT_CONSENT, FormFieldConfig, PublicFormType,
+  activeFields, buyerCategoryComments, resolveOptions,
+} from './field-defs';
 import { notify } from './notify';
 
-// v1.33.1: публичные формы (лиды) — порт supabase/functions/public-form.
-// Публичный доступ: rate-limit (10/мин/IP, скользящее окно), honeypot, задержка ≥2 сек,
-// подтверждение согласия, дедуп ИНН/телефон/email по таблицам, 3-ступенчатый INSERT
-// (полный → core → минимум), принудительный статус «Новый», уведомления (см. notify.ts).
-// marketingKit вырезан (v1.33.0) — типов supplier/buyer/ticket.
+// Публичные формы (Настройки → Формы → код для сайта). Порт supabase/functions/public-form (v1.31.18).
+// GET  /forms?type=…  — конфиг формы: поля (core + alwaysShow + выбранные админом), обязательность, опции.
+// POST /forms         — {type, values, consent, honeypot, renderedAt}: заявка в раздел CRM
+//                       со статусом «Новый с сайта» (обращения — «Новый запрос с формы»), from_api = true.
+// Публичный доступ: rate-limit, honeypot, задержка ≥ 2 сек, согласие на обработку ПДн, дедуп по таблицам.
+// Фронт (PublicFormPage) читает текст ошибки из поля `error` — поэтому все ошибки отдаём как { error }.
 
-const DEFAULT_DOMAIN_ID = '00000000-0000-4000-8000-000000000001';
 const RATE_WINDOW_MS = 60_000;
 const RATE_MAX = 10;
+const MIN_SUBMIT_MS = 2000;
+const MAX_BODY_BYTES = 256 * 1024;
+const MAX_FIELD_LEN = 2000;
 
-interface FieldDefLite { key: string; label?: string; core?: boolean; alwaysShow?: boolean; defaultValue?: string | number; optionsSource?: string; inputType?: string; }
+const SITE_STATUS = 'Новый с сайта';
+const SITE_TICKET_STATUS = 'Новый запрос с формы';
+const SITE_SOURCE = 'Форма с сайта';
+const DEFAULT_SERVICE = 'DBS'; // ТЗ v1.22.41: поставщик с формы получает сервис продаж DBS
+
+const TABLES = { supplier: 'public.suppliers', buyer: 'public.buyers', ticket: 'public.tickets' } as const;
+const WHO = { supplier: 'Поставщик', buyer: 'Покупатель' } as const;
+
+export function fail(message: string, status: HttpStatus = HttpStatus.BAD_REQUEST): HttpException {
+  return new HttpException({ error: message }, status);
+}
 
 const attempts = new Map<string, { count: number; resetAt: number }>();
 
@@ -28,270 +45,207 @@ function rateLimited(ip: string): boolean {
   return rec.count > RATE_MAX;
 }
 
-interface SettingsLeads { items?: Array<Record<string, unknown>>; }
+interface StoredForm {
+  enabled?: boolean;
+  title?: string;
+  description?: string;
+  successMessage?: string;
+  errorMessage?: string;
+  consent?: typeof DEFAULT_CONSENT;
+  fields?: FormFieldConfig[];
+}
+
+const isEmpty = (v: unknown) => v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0);
 
 @Injectable()
 export class PublicService {
   constructor(private db: DatabaseService) {}
 
-  private async readSettings() {
+  private async loadForm(type: PublicFormType) {
     const { rows } = await this.db.withAdmin(c =>
       c.query(`SELECT settings FROM public.app_settings WHERE id = 'global'`),
     );
-    return (rows[0]?.settings ?? {}) as Record<string, unknown>;
+    const settings = (rows[0]?.settings ?? {}) as Record<string, unknown>;
+    const form = ((settings.forms ?? {}) as Record<string, StoredForm | undefined>)[type];
+    return { settings, form };
   }
 
-  // ─── GET /forms/:type/config ────────────────────────────────────────────────
+  // ─── GET /forms?type=… ──────────────────────────────────────────────────────
   async getConfig(type: PublicFormType) {
-    const settings = await this.readSettings();
-    const forms = (settings.forms || {}) as Record<string, unknown>;
-    const cfg = (forms[type] || {}) as Record<string, unknown>;
-    const fieldDefs = FIELD_DEFS[type] || [];
-    const visibleFields = (cfg.fields as Array<Record<string, unknown>> | undefined) ||
-      fieldDefs.map(f => ({ key: f.key, visible: Boolean(f.core || f.alwaysShow) }));
-    // v1.35.0: нормализация видимости. Core-поля видимы ВСЕГДА (иначе форма «теряла»
-    // поля при старых конфигах, где visible стоял только у пары — симптом «формы из
-    // двух полей»). Остальные — по флагу visible (не false).
-    const fields = visibleFields
-      .filter(f => fieldDefs.some(d => d.key === f.key))
-      .map(f => {
-        const def = fieldDefs.find(d => d.key === f.key) as FieldDefLite;
-        const visible = Boolean(def.core) || (f.visible !== undefined ? f.visible !== false : Boolean(def.alwaysShow));
-        // v1.35.2: подпись из дефиниции поля — старые конфиги хранили только key/visible.
-        return { ...f, label: def.label || def.key, visible, options: resolveOptions(def.optionsSource, settings) };
-      });
+    const { settings, form } = await this.loadForm(type);
+    if (!form) throw fail('Форма не настроена', HttpStatus.NOT_FOUND);
     return {
-      enabled: cfg.enabled !== false,
-      title: cfg.title || '',
-      description: cfg.description || '',
-      successMessage: cfg.successMessage || '',
-      errorMessage: cfg.errorMessage || '',
-      consent: cfg.consent || DEFAULT_CONSENT,
-      fields,
+      enabled: form.enabled !== false,
+      title: form.title || '',
+      description: form.description || '',
+      successMessage: form.successMessage || '',
+      errorMessage: form.errorMessage || '',
+      consent: form.consent || DEFAULT_CONSENT,
+      fields: activeFields(type, form.fields).map(f => ({
+        key: f.key,
+        label: f.label,
+        inputType: f.inputType,
+        required: f.required,
+        defaultValue: f.defaultValue,
+        options: resolveOptions(f.optionsSource, settings),
+      })),
     };
   }
 
-  // ─── POST /forms/:type/submit ───────────────────────────────────────────────
+  // Whitelist по конфигу формы + обязательность + defaultValue (ТЗ v1.22.39). Лишнее от клиента отбрасывается.
+  private cleanValues(fields: ActiveField[], values: Record<string, unknown>): Record<string, unknown> {
+    const clean: Record<string, unknown> = {};
+    for (const f of fields) {
+      let v: unknown = values[f.key] ?? f.defaultValue;
+      if (Array.isArray(v)) v = v.map(x => String(x).trim()).filter(Boolean);
+      else if (v !== undefined && v !== null) v = String(v).trim();
+      if (isEmpty(v)) {
+        if (f.required) throw fail(`Заполните обязательное поле: ${f.label}`);
+        continue;
+      }
+      if (f.inputType === 'multiselect' && !Array.isArray(v)) v = [v];
+      if (f.inputType === 'number' && !Number.isFinite(Number(v))) throw fail(`Поле «${f.label}» должно быть числом`);
+      if (typeof v === 'string' && v.length > MAX_FIELD_LEN) throw fail(`Поле «${f.label}» слишком длинное`);
+      clean[f.key] = v;
+    }
+    return clean;
+  }
+
+  // Дубликат по ИНН / телефону (последние 10 цифр) / email среди неудалённых записей раздела.
+  private async findDuplicate(type: 'supplier' | 'buyer', inn: string, phoneDigits: string, email: string): Promise<string> {
+    const who = WHO[type];
+    const checks: Array<[boolean, string, string, string]> = [
+      [Boolean(inn), 'inn = $1', inn, `${who} с таким ИНН уже существует в базе`],
+      [phoneDigits.length >= 10, `regexp_replace(phone, '\\D', '', 'g') LIKE $1`, `%${phoneDigits.slice(-10)}%`, `${who} с таким телефоном уже есть в базе`],
+      [Boolean(email), 'lower(email) = $1', email, `${who} с таким email уже есть в базе`],
+    ];
+    for (const [on, cond, val, msg] of checks) {
+      if (!on) continue;
+      const { rows } = await this.db.withAdmin(c =>
+        c.query(`SELECT 1 FROM ${TABLES[type]} WHERE ${cond} AND deleted_at IS NULL LIMIT 1`, [val]),
+      );
+      if (rows[0]) return msg;
+    }
+    return '';
+  }
+
+  // ─── POST /forms ────────────────────────────────────────────────────────────
   async submit(type: PublicFormType, body: Record<string, unknown>, ip: string, contentLength?: number) {
-    if (contentLength && contentLength > 256 * 1024) {
-      throw new BadRequestException('Слишком большой запрос');
-    }
+    if (contentLength && contentLength > MAX_BODY_BYTES) throw fail('Запрос слишком большой', HttpStatus.PAYLOAD_TOO_LARGE);
     if (rateLimited(ip)) {
-      throw new BadRequestException('Слишком много запросов. Подождите минуту и попробуйте снова.');
-    }
-    const settings = await this.readSettings();
-    const forms = (settings.forms || {}) as Record<string, unknown>;
-    const cfg = (forms[type] || {}) as Record<string, unknown>;
-    if (cfg.enabled === false) throw new BadRequestException('Форма отключена');
-
-    const fieldDefs = FIELD_DEFS[type] || [];
-    const now = new Date();
-
-    // Совместимость двух контрактов: embed.js шлёт {data, loadedAt, website},
-    // PublicFormPage — {values, renderedAt, honeypot} (в edge-функции совпадало только с embed.js).
-    const data = (body.data ?? body.values ?? {}) as Record<string, unknown>;
-    const loadedAt = Number(body.loadedAt ?? body.renderedAt ?? 0);
-    const honeypot = body.website ?? body.honeypot;
-
-    if (now.getTime() - loadedAt < 2000) {
-      throw new BadRequestException('Подождите пару секунд и отправьте форму ещё раз');
-    }
-    if (typeof honeypot === 'string' && honeypot.trim() !== '') {
-      return { success: true }; // honeypot — молча "успех"
+      throw fail('Форма не доступна из-за частых запросов, попробуйте зайти позднее или обратиться в поддержку', HttpStatus.TOO_MANY_REQUESTS);
     }
 
-    const consentGiven = body.consent === true || body.consent === 'true';
-    const leadDefaultStatus = (settings.leadDefaultStatus as string) || 'Новый';
-    const leadDefaultType = (settings.leadDefaultType as string) || 'Поставщик/склад';
-
-    if (cfg.requireConsent !== false && !consentGiven) {
-      throw new BadRequestException('Необходимо подтвердить согласие на обработку персональных данных');
+    // Антибот: бот получает «успех», в БД ничего не пишется.
+    if (typeof body.honeypot === 'string' && body.honeypot.trim() !== '') return { success: true };
+    if (Date.now() - Number(body.renderedAt || 0) < MIN_SUBMIT_MS) {
+      throw fail('Подождите пару секунд и отправьте форму ещё раз');
+    }
+    if (body.consent !== true && body.consent !== 'true' && body.consent !== 'on') {
+      throw fail('Необходимо согласие на обработку персональных данных');
     }
 
-    const visibleFields = ((cfg.fields as Array<Record<string, unknown>> | undefined) ||
-      fieldDefs.map(f => ({ key: f.key, visible: Boolean(f.core || f.alwaysShow) })))
-      .filter(f => fieldDefs.some(d => d.key === f.key));
+    const { settings, form } = await this.loadForm(type);
+    if (!form || form.enabled === false) throw fail('Форма недоступна', HttpStatus.NOT_FOUND);
 
-    const values: Record<string, unknown> = {};
-    for (const f of visibleFields) {
-      const def = fieldDefs.find(d => d.key === f.key) as FieldDefLite;
-      const value = data[f.key as string];
-      if (value === undefined || value === null) continue;
-      if (def.inputType === 'number') {
-        const n = Number(value);
-        if (!Number.isFinite(n)) throw new BadRequestException(`Поле "${f.key}" должно быть числом`);
-        values[f.key as string] = n;
-      } else if (def.inputType === 'multiselect') {
-        if (!Array.isArray(value)) throw new BadRequestException(`Поле "${f.key}" должно быть списком`);
-        values[f.key as string] = value.map(v => String(v).trim()).filter(Boolean);
-      } else {
-        const s = String(value).trim();
-        if (s.length > 2000) throw new BadRequestException(`Поле "${f.key}" слишком длинное`);
-        values[f.key as string] = s;
-      }
-    }
-    for (const def of fieldDefs) {
-      if (def.core && !(def.key in values)) {
-        throw new BadRequestException(`Заполните обязательное поле: ${def.key}`);
-      }
-    }
+    const clean = this.cleanValues(activeFields(type, form.fields), (body.values ?? {}) as Record<string, unknown>);
+    const str = (k: string) => String(clean[k] ?? '').trim();
+    const phone = str('phone') || str('contactPhone');
+    const email = str('email') || str('contactEmail');
+    if (email && !/^\S+@\S+\.\S+$/.test(email)) throw fail('Некорректный email');
 
-    const name = String(values.tradeName || values.companyName || values.contactName || '').trim();
-    const text = String(values.text || '').trim();
-    const phoneRaw = String(values.phone || values.contactPhone || '').trim();
-    const phoneDigits = phoneRaw.replace(/\D/g, '');
-    const emailRaw = String(values.email || values.contactEmail || '').trim().toLowerCase();
-    const emailOk = !emailRaw || /^\S+@\S+\.\S+$/.test(emailRaw);
-    const inn = String(values.inn || '').trim();
-    const source = String(values.source || '').trim();
-    const contactPref = Array.isArray(values.contactPref)
-      ? (values.contactPref as string[]).join(', ')
-      : String(values.contactPref || '').trim();
-    const buyerType = String(values.type || leadDefaultType).trim();
-    const category = String(values.category || '').trim();
-    const responsibleId = typeof cfg.responsibleId === 'string' ? cfg.responsibleId : null;
-    const date = now.toISOString();
-
-    if (!name && !text) throw new BadRequestException('Заполните обязательные поля');
-    if (!emailOk) throw new BadRequestException('Некорректный email');
-
-    let dedupHit = '';
-    const checkLeads = async (field: string, value: string) => {
-      const { leads } = settings as { leads?: SettingsLeads };
-      const items = leads?.items || [];
-      const hit = items.find(l =>
-        l.source === 'website' &&
-        String(l[field] || '').trim() === value &&
-        String(l.status || '') !== 'Отклонён' &&
-        String(l.status || '') !== 'Отклонено');
-      if (hit) dedupHit = `Лид ${field === 'inn' ? 'с таким ИНН' : field === 'phone' ? 'с таким телефоном' : 'с таким email'} уже есть в базе`;
+    const date = new Date().toISOString();
+    const notifyBase = {
+      db: this.db, formType: type, settings,
+      name: str('tradeName') || str('contactName'), text: str('text'),
+      phone, email: email.toLowerCase(), inn: str('inn'), city: str('city'), website: str('website'),
+      buyerType: str('type'), category: str('category'),
+      contactPref: [clean.contactPref].flat().filter(Boolean).join(', '),
+      contactName: str('contactName'), contactRole: str('contactRole'),
+      leadType: type, ip, date,
     };
-    // v1.33.3: дедуп unified — раньше блоки supplier/buyer дублировали друг друга (DRY).
-    if ((type === 'supplier' || type === 'buyer') && inn) {
-      const table = type === 'supplier' ? 'public.suppliers' : 'public.buyers';
-      const who = type === 'supplier' ? 'Поставщик' : 'Покупатель';
-      const hit = async (sql: string, val: string, msg: string) => {
-        if (dedupHit) return;
-        const { rows } = await this.db.withAdmin(c => c.query(sql, [val]));
-        if (rows[0]) dedupHit = msg;
-      };
-      await hit(`SELECT id FROM ${table} WHERE inn = $1 AND deleted_at IS NULL LIMIT 1`, inn, `${who} с таким ИНН уже существует в базе`);
-      if (phoneDigits.length >= 10) {
-        await hit(`SELECT id FROM ${table} WHERE regexp_replace(phone, '\\D', '', 'g') LIKE $1 AND deleted_at IS NULL LIMIT 1`,
-          `%${phoneDigits.slice(-10)}%`, `${who} с таким телефоном уже есть в базе`);
+
+    // Дедуп: запись НЕ создаётся, менеджеру уходит уведомление, посетителю — понятный отказ.
+    if (type !== 'ticket') {
+      const dup = await this.findDuplicate(type, str('inn'), phone.replace(/\D/g, ''), email.toLowerCase());
+      if (dup) {
+        await notify({ ...notifyBase, id: '', entityStatus: '', dedupHit: dup });
+        throw fail(`${dup}. Заявка направлена менеджеру`, HttpStatus.CONFLICT);
       }
-      if (emailRaw) {
-        await hit(`SELECT id FROM ${table} WHERE lower(email) = $1 AND deleted_at IS NULL LIMIT 1`, emailRaw, `${who} с таким email уже есть в базе`);
-      }
-      if (!dedupHit) await checkLeads('inn', inn);
-      if (!dedupHit && phoneDigits) await checkLeads('phone', phoneDigits);
-      if (!dedupHit && emailRaw) await checkLeads('email', emailRaw);
     }
 
-    // Дедуп (как в edge function): БЕЗ создания записи — только уведомление менеджеру.
-    if (dedupHit) {
-      await notify({
-        db: this.db, formType: type, id: '', entityStatus: '',
-        settings, cfg, name, text, phone: phoneRaw, email: emailRaw, inn,
-        city: String(values.city || '').trim(), website: String(values.website || '').trim(),
-        buyerType, category, contactPref,
-        contactName: String(values.contactName || '').trim(),
-        contactRole: String(values.contactRole || '').trim(),
-        leadType: type, dedupHit, ip, date,
-      });
-      throw new BadRequestException(`${dedupHit}. Заявка направлена менеджеру`);
+    const { id, status } = await this.insert(type, clean, settings, date);
+    await notify({ ...notifyBase, id, entityStatus: status, dedupHit: '' });
+    return { success: true };
+  }
+
+  // Одна вставка с колонками реальной схемы (migrations/prod_baseline.sql + 0007). Ошибка БД — в лог и 500:
+  // раньше «ступенчатый fallback» глотал её, и заявки молча терялись.
+  private async insert(type: PublicFormType, clean: Record<string, unknown>, settings: Record<string, unknown>, date: string) {
+    const prefs = [clean.contactPref].flat().filter(Boolean);
+    const list = (v: unknown) => (Array.isArray(v) ? v : []);
+    const history = (entry: object[]) => JSON.stringify(entry);
+    const createdEntry = [{
+      id: randomUUID(), date, field: 'создание', newValue: 'Заявка с сайта', userId: 'public-form', userName: SITE_SOURCE,
+    }];
+
+    let status = SITE_STATUS;
+    let row: Record<string, unknown>;
+
+    if (type === 'ticket') {
+      status = SITE_TICKET_STATUS;
+      row = {
+        type: clean.type, status,
+        subject: String(clean.text).slice(0, 120), // subject NOT NULL
+        text: clean.text,
+        contact_name: clean.contactName ?? null,
+        contact_phone: clean.contactPhone ?? null,
+        contact_email: clean.contactEmail ?? null,
+        contact_prefs: JSON.stringify(prefs),
+        from_api: true,
+        history: history([]),
+      };
+    } else {
+      row = {
+        type: clean.type,
+        trade_name: clean.tradeName,
+        city: clean.city,
+        website: clean.website ?? null,
+        inn: clean.inn ?? null,
+        contact_role: clean.contactRole ?? null,
+        contact_name: clean.contactName,
+        phone: clean.phone,
+        email: clean.email,
+        status,
+        source: clean.source || SITE_SOURCE,
+        contact_prefs: JSON.stringify(prefs),
+        from_api: true,
+        history: history(createdEntry),
+      };
+      if (type === 'supplier') {
+        row.product_groups = list(clean.productGroups);
+        row.own_brands = String(clean.ownBrands ?? '').split(',').map(s => s.trim()).filter(Boolean);
+        row.services = [DEFAULT_SERVICE];
+      } else {
+        // «Оборот» в форме — подпись категории: возвращаем букву A/B/C (колонка NOT NULL DEFAULT 'C').
+        const comments = buyerCategoryComments(settings);
+        row.category = CATEGORY_KEYS.find(k => k === clean.category || comments[k] === clean.category);
+        row.locations_count = clean.locationCount === undefined ? undefined : Number(clean.locationCount);
+      }
     }
 
-    let id = '';
-    let entityStatus = type === 'ticket' ? 'Новый' : '';
-    if (type === 'supplier' || type === 'buyer') {
-      const history = {
-        id: `h-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        at: date, by: 'Форма на сайте', changes: ['created'],
-      };
-      const base = {
-        token: Math.random().toString(16).slice(2) + Date.now().toString(16),
-        name, trade_name: name, type: buyerType, city: String(values.city || '').trim(),
-        inn: inn || null, address: String(values.address || '').trim() || null,
-        website: String(values.website || '').trim() || null, contact_name: String(values.contactName || '').trim() || null,
-        contact_role: String(values.contactRole || '').trim() || null,
-        phone: phoneRaw || null, email: emailRaw || null, contact_pref: contactPref || null,
-        responsible_id: responsibleId, source: source || null,
-        own_brands: Array.isArray(values.ownBrands) ? values.ownBrands : String(values.ownBrands || '').trim() || null,
-        product_groups: Array.isArray(values.productGroups) ? values.productGroups : null,
-        supplier_services: Array.isArray(values.services) ? values.services : null,
-        buyer_category_comment: category || null,
-        history: [history], status: leadDefaultStatus,
-      };
-      const table = type === 'supplier' ? 'public.suppliers' : 'public.buyers';
-      const extra = type === 'buyer'
-        ? { location_count: Number.isFinite(Number(values.locationCount)) ? Number(values.locationCount) : null }
-        : { warehouse_count: Number.isFinite(Number(values.warehouseCount)) ? Number(values.warehouseCount) : null };
-      const core = {
-        token: base.token, name: base.name, trade_name: base.name, type: base.type, city: base.city,
-        contact_name: base.contact_name, phone: base.phone, email: base.email,
-        responsible_id: responsibleId, history: [history], status: leadDefaultStatus,
-      };
-      const min = {
-        token: base.token, name: base.name, type: base.type, city: base.city,
-        contact_name: base.contact_name, phone: base.phone, email: base.email,
-      };
-      const tryInsert = async (row: Record<string, unknown>): Promise<boolean> => {
-        try {
-          const cols = Object.keys(row);
-          const r = await this.db.withAdmin(c =>
-            c.query(
-              `INSERT INTO ${table} (id, domain_id, ${cols.join(', ')}) VALUES (gen_random_uuid(), $1, ${cols.map((_, i) => `$${i + 2}`).join(', ')}) RETURNING id`,
-              [DEFAULT_DOMAIN_ID, ...cols.map(k => row[k])],
-            ),
-          );
-          id = String(r.rows[0].id);
-          return true;
-        } catch {
-          return false;
-        }
-      };
-      if (!(await tryInsert({ ...base, ...extra }))) {
-        if (!(await tryInsert(core))) {
-          if (!(await tryInsert(min))) throw new BadRequestException('Не удалось сохранить заявку');
-        }
-      }
-      entityStatus = leadDefaultStatus;
-    } else if (type === 'ticket') {
-      const r = await this.db.withAdmin(c =>
+    const cols = Object.keys(row).filter(k => row[k] !== undefined);
+    try {
+      const { rows } = await this.db.withAdmin(c =>
         c.query(
-          `INSERT INTO public.tickets (id, type, status, source, contact_name, contact_phone, contact_email, contact_pref, text, created_at)
-           VALUES (gen_random_uuid(), $1, 'Новый', 'website', $2, $3, $4, $5, $6, now()) RETURNING id`,
-          [String(values.type || '').trim(), String(values.contactName || '').trim(), phoneRaw, emailRaw, contactPref, text],
+          `INSERT INTO ${TABLES[type]} (${cols.join(', ')}) VALUES (${cols.map((_, i) => `$${i + 1}`).join(', ')}) RETURNING id`,
+          cols.map(k => row[k]),
         ),
       );
-      id = String(r.rows[0].id);
-      entityStatus = 'Новый';
+      return { id: String(rows[0].id), status };
+    } catch (e) {
+      console.error(JSON.stringify({ level: 'error', msg: 'public-form insert failed', type, err: String(e) }));
+      throw fail('Не удалось сохранить заявку', HttpStatus.INTERNAL_SERVER_ERROR);
     }
-
-    await notify({
-      db: this.db,
-      formType: type,
-      id, entityStatus,
-      settings,
-      cfg,
-      name, text,
-      phone: phoneRaw, email: emailRaw,
-      inn, city: String(values.city || '').trim(),
-      website: String(values.website || '').trim(),
-      buyerType, category,
-      contactPref,
-      contactName: String(values.contactName || '').trim(),
-      contactRole: String(values.contactRole || '').trim(),
-      leadType: type,
-      dedupHit,
-      ip,
-      date,
-    });
-
-    if (dedupHit) {
-      throw new BadRequestException(`${dedupHit}. Заявка направлена менеджеру`);
-    }
-    return { success: true };
   }
 }

@@ -1,6 +1,6 @@
-// v1.33.1: FIELD_DEFS публичных форм — порт из supabase/functions/public-form (1:1).
-// Держать в синке с FORM_FIELD_DEFINITIONS во фронте (как и раньше — вручную).
-// v1.33.0: форма marketingKit вырезана, типов supplier/buyer/ticket.
+// FIELD_DEFS публичных форм — 1:1 с FORM_FIELD_DEFINITIONS во фронте (src/constants/index.ts):
+// те же ключи, подписи и порядок. Менять только вместе с фронтом.
+// Типы форм: supplier / buyer / ticket (marketingKit вырезан в v1.33.0).
 
 export type PublicFormType = 'supplier' | 'buyer' | 'ticket';
 
@@ -41,11 +41,10 @@ export const FIELD_DEFS: Record<PublicFormType, FieldDef[]> = {
     { key: 'phone', label: 'Телефон', inputType: 'tel', core: true },
     { key: 'email', label: 'Email', inputType: 'email', core: true },
     { key: 'website', label: 'Сайт', inputType: 'text' },
-    { key: 'address', label: 'Адрес', inputType: 'text' },
     { key: 'source', label: 'Откуда про нас узнали?', inputType: 'select', optionsSource: 'sources' },
-    { key: 'locationCount', label: 'Количество торговых точек', inputType: 'number', defaultValue: 1, alwaysShow: true }, // ТЗ v1.22.31
-    { key: 'category', label: 'Примерный оборот в мес.', inputType: 'select', optionsSource: 'buyerCategoryComments' }, // ТЗ v1.22.25
     { key: 'contactPref', label: 'Предпочтительный способ связи', inputType: 'multiselect', optionsSource: 'contactPrefs' },
+    { key: 'locationCount', label: 'Количество торговых точек', inputType: 'number', defaultValue: 1, alwaysShow: true }, // ТЗ v1.22.31: по умолчанию 1
+    { key: 'category', label: 'Примерный оборот в мес.', inputType: 'select', optionsSource: 'buyerCategoryComments' }, // ТЗ v1.22.25
   ],
   ticket: [
     { key: 'type', label: 'Тип обращения', inputType: 'select', core: true, optionsSource: 'ticketTypes' },
@@ -58,7 +57,6 @@ export const FIELD_DEFS: Record<PublicFormType, FieldDef[]> = {
 };
 
 const STATIC_OPTIONS: Record<string, string[]> = {
-  abcCategories: ['A', 'B', 'C'],
   roleTypes: ['директор', 'менеджер', 'собственник', 'РОП', 'ТП'],
   contactPrefs: ['почта', 'телефон', 'WhatsApp', 'Telegram'],
 };
@@ -68,6 +66,28 @@ export const DEFAULT_CONSENT = {
   documentUrl: '',
   documentLabel: 'Политика обработки персональных данных',
 };
+
+export const CATEGORY_KEYS = ['A', 'B', 'C'] as const;
+
+// Категория покупателя A/B/C ↔ подпись («оборот»), которую видит посетитель формы.
+export function buyerCategoryComments(settings: Record<string, unknown>): Record<string, string> {
+  return (settings.buyerCategoryComment as Record<string, string>) ||
+    { A: '1 500 000 и больше', B: '500 000 – 1 500 000', C: '50 000 – 500 000' };
+}
+
+// Конфиг формы в app_settings.settings.forms[type].fields: {key, required} — так его сохраняет SettingsPage.
+export interface FormFieldConfig { key: string; required?: boolean }
+
+export interface ActiveField extends FieldDef { required: boolean }
+
+// Поля, которые реально есть в форме: core + alwaysShow + выбранные админом, в порядке FIELD_DEFS.
+// Обязательны: core или отмеченные админом. Один источник и для GET (показ), и для POST (whitelist + проверка).
+export function activeFields(type: PublicFormType, chosen: FormFieldConfig[] | undefined): ActiveField[] {
+  const required = new Map((chosen || []).map(f => [f.key, Boolean(f.required)]));
+  return FIELD_DEFS[type]
+    .filter(d => d.core || d.alwaysShow || required.has(d.key))
+    .map(d => ({ ...d, required: Boolean(d.core || required.get(d.key)) }));
+}
 
 export function resolveOptions(source: string | undefined, settings: Record<string, unknown>): string[] | undefined {
   if (!source) return undefined;
@@ -79,15 +99,13 @@ export function resolveOptions(source: string | undefined, settings: Record<stri
     const rt = settings.roleTypes as string[] | undefined;
     return Array.isArray(rt) && rt.length ? rt : STATIC_OPTIONS.roleTypes;
   }
-  if (source in STATIC_OPTIONS) return STATIC_OPTIONS[source];
   if (source === 'sources') {
     const srcs = (settings.sources as Array<{ name: string; deletedAt?: string }>) || [];
     return srcs.filter(x => !x.deletedAt).map(x => x.name);
   }
   if (source === 'buyerCategoryComments') {
-    const c = (settings.buyerCategoryComment as Record<string, string>) ||
-      { A: '1 500 000 и больше', B: '500 000 – 1 500 000', C: '50 000 – 500 000' };
-    return ['A', 'B', 'C'].map(k => c[k]).filter(Boolean);
+    const c = buyerCategoryComments(settings);
+    return CATEGORY_KEYS.map(k => c[k]).filter(Boolean);
   }
   if (source === 'supplierTypes') return (settings.supplierTypes as string[]) || [];
   if (source === 'buyerTypes') return (settings.buyerTypes as string[]) || [];
