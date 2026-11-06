@@ -758,20 +758,19 @@ const [tab, setTab] = useState('Статусы');
   const notifChannels = [
     {
       key: 'telegram' as const, title: 'Telegram', enabled: notif.telegram.enabled,
-      secretHint: 'Токен бота задаётся в env API (TELEGRAM_BOT_TOKEN). Manage Secrets: TELEGRAM_BOT_TOKEN',
+      secretHint: 'Токен бота задаётся в env API: TELEGRAM_BOT_TOKEN',
       fields: [{ label: 'Chat ID общего чата', value: notif.telegram.globalChatId, save: (v: string) => saveNotif('telegram', { globalChatId: v }) }],
     },
     {
       key: 'max' as const, title: 'Мессенджер MAX', enabled: notif.max.enabled,
-      secretHint: 'Токен бота задаётся в Secrets: MAX_BOT_TOKEN (MasterBot в мессенджере или business.max.ru)',
+      secretHint: 'Токен бота задаётся в env API: MAX_BOT_TOKEN (MasterBot в мессенджере или business.max.ru)',
       fields: [{ label: 'Chat ID чата', value: notif.max.globalChatId, save: (v: string) => saveNotif('max', { globalChatId: v }) }],
     },
     {
       key: 'email' as const, title: 'Email', enabled: notif.email.enabled,
-      secretHint: 'API-ключ задаётся в Secrets: RESEND_API_KEY (resend.com)',
+      secretHint: 'Письма уходят через SMTP API: задайте SMTP_URL и EMAIL_FROM в env API',
       fields: [
         { label: 'Почта получателя', value: notif.email.to, save: (v: string) => saveNotif('email', { to: v }) },
-        { label: 'Отправитель (From)', value: notif.email.from, save: (v: string) => saveNotif('email', { from: v }) },
       ],
     },
   ];

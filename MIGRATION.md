@@ -1,3 +1,47 @@
+## v1.35.9 — Фикс: заявки с форм не видны без F5, ошибка ЛК, «Сохранено» при F5
+
+**Причина (регрессия 1.35.6, моя):** при переписывании INSERT публичных форм `domain_id` не записывался (рассчитывал на DEFAULT,
+а на боевой БД у колонки его нет) и не писалось событие синка. Отсюда три симптома:
+1. `null value in column "domain_id" of relation "sse_tickets"` в `TicketService.createLk` — у поставщика, созданного формой, `domain_id = NULL`.
+2. Заявка с формы не появлялась в ERP до F5 — не было `sync_events`/`pg_notify`, SSE нечего было слать.
+3. «✓ Сохранено» при каждом F5 в ЛК — стартовая загрузка/проверка PIN вызывала `post({})` без флага silent.
+
+**Исправлено:** форма пишет `domain_id` явно и в той же транзакции записывает событие синка (suppliers/buyers/tickets, op create;
+сбой события не откатывает заявку). `createLk` не падает на NULL (fallback на домен по умолчанию). В ЛК все пустые `post({})`
+(загрузка данных, PIN, повтор) — тихие, «Сохранено» только после реальных правок.
+
+**ОБЯЗАТЕЛЬНО выполнить миграцию `migrations/0011_fix_null_domain_id.sql`:** она проставляет домен уже созданным заявкам с `domain_id = NULL`
+и ставит колонке DEFAULT + NOT NULL (идемпотентно). Без неё старые заявки останутся с NULL (ЛК этих поставщиков работает за счёт fallback, но RLS/события — нет).
+
+## v1.35.8 — Аудит безопасности (прод-готовность)
+
+**Критичное:**
+- **JWT_SECRET** — убран запасной секрет `dev-only-secret`. Без `JWT_SECRET` (≥ 32 символов) API не стартует. Токены только HS256.
+- **Настройки:** `PUT /sync/settings` для не-админа больше не меняет `users` (права), `notifications` и `forms` — эти ключи берутся из БД. Остальные настройки менеджеры сохраняют как раньше.
+- **Логин:** лимит по email (5/5 мин, с любого IP) и по IP (20/5 мин). IP — только `req.ip`; Fastify `trustProxy` = `TRUST_PROXY_HOPS` (по умолчанию 1). То же для публичных форм (раньше `x-forwarded-for` подделывался).
+- **Файлы:** `POST /files` требует CRM-токен или действующий токен ЛК поставщика (фронт ЛК передаёт его), лимит 30 загрузок/10 мин с IP, проверка сигнатур файла (magic bytes), имена — UUID, при выдаче `nosniff`, docx/xlsx/csv/txt — только скачивание.
+- **XSS:** текст новости в ЛК проходит через DOMPurify.
+- **Логин-форма:** «Запомнить» хранит только email, пароль в localStorage больше не сохраняется (старые записи зачищаются при открытии).
+- **REST /suppliers, /buyers:** нельзя писать `service_access`, `pin`, `edo_token`, `from_api`, `created_by`, `external_*`.
+
+**Защита периметра:** заголовки API (nosniff, X-Frame-Options, HSTS, Referrer-Policy), глобальный лимит запросов с IP (`RATE_LIMIT_PER_MIN`, 600), CORS по `CORS_ORIGINS` (пусто = любой origin, как раньше), nginx фронта: CSP, HSTS, Permissions-Policy во всех location (`security-headers.inc`, копируется в Dockerfile).
+
+**Что нужно сделать на сервере:** задать `JWT_SECRET` (≥ 32 символов), `CORS_ORIGINS` (домены CRM), проверить `TRUST_PROXY_HOPS`; включить Force HTTPS в Coolify. **Не вошло — требует сверки с боевой БД:** RLS на `suppliers/buyers/tickets/tasks/app_settings/profiles` (проверка и шаблон — в отчёте аудита), серверная проверка прав разделов в `/sync/ops`, шифрование/хэширование PIN и `edo_token`, перенос JWT в HttpOnly-cookie, `npm audit` для `api/`.
+
+## v1.35.7 — Ремонт уведомлений о заявках с форм
+
+**Причина:** `notify.ts` читал ключи, которых нет в настройках: `telegram.chatId`, `max.token/userId`,
+`cfg.personalEmail`, а SettingsPage сохраняет `{enabled, globalChatId}` (Telegram/MAX) и `{enabled, to, from}` (email).
+Общие каналы не срабатывали вообще.
+
+**Теперь (как в 1.31.18):** общие каналы Telegram / MAX / Email — по `enabled` + `globalChatId` / `to`.
+Личные уведомления — активным менеджерам с доступом к разделу формы (suppliers / buyers / support) в их канал
+(`notifyChannel`: telegram / max / email, `notifyChatId`, `notifyEmail`). MAX: `recipient.chat_id`, токен без «Bearer».
+Токены — только в env API: `TELEGRAM_BOT_TOKEN`, `MAX_BOT_TOKEN` (+ `MAX_API_BASE`). Email — через outbox_events
+и почтовый воркер (`SMTP_URL`, `EMAIL_FROM`). Таймаут канала 8 с, ошибка канала пишется в лог и не ломает форму.
+Уведомление о дубле уходит во все каналы. В настройках убрано поле «Отправитель (From)» (SMTP берёт `EMAIL_FROM`),
+обновлены подсказки. Миграций БД не требуется; нужно добавить `MAX_BOT_TOKEN` в env, если используется MAX.
+
 ## v1.35.6 — Ремонт внешних форм (Настройки → Формы → код для сайта)
 
 **Причина:** при переезде public-form с Supabase edge function на API (`api/src/public`) потерялся контракт

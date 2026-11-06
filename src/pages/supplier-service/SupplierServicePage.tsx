@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { API_URL } from '@/lib/api';
 import { fixMojibake } from '@/lib/utils';
+import DOMPurify from 'dompurify';
 import { uploadLkFile } from '@/lib/lk-upload'; // v1.30.76: загрузка картинок (импорт отсутствовал)
 import { toast } from 'sonner'; // v1.30.76: toast был не определён — модалки не закрывались
 import { AlertCircle, Check, ChevronDown, Copy, Headset, Info, LayoutDashboard, LogOut, Pencil, Plus, Trash2, Truck, Warehouse, X } from 'lucide-react';
@@ -187,11 +188,11 @@ export default function SupplierServicePage() {
     if (initialLoadDone.current) return;
     // ТЗ v1.23.55: при живой сессии грузим данные НЕМЕДЛЕННО, не дожидаясь GET-метаданных —
     // убирает видимую задержку «условия появляются не сразу».
-    if (pinPassed) { initialLoadDone.current = true; post({}).then(err => { if (err) { if (/пин|pin|недейств|токен|token/i.test(String(err))) { initialLoadDone.current = false; setNotice(err); sessionStorage.removeItem('dbs_pin_ok'); sessionStorage.removeItem('dbs_pin'); setPinPassed(false); } else { setTimeout(() => post({}).catch(() => {}), 2000); } } }); return; } // v1.30.95: сетевые сбои не выкидывают из ЛК
+    if (pinPassed) { initialLoadDone.current = true; post({}, true).then(err => { if (err) { if (/пин|pin|недейств|токен|token/i.test(String(err))) { initialLoadDone.current = false; setNotice(err); sessionStorage.removeItem('dbs_pin_ok'); sessionStorage.removeItem('dbs_pin'); setPinPassed(false); } else { setTimeout(() => post({}, true).catch(() => {}), 2000); } } }); return; } // v1.30.95: сетевые сбои не выкидывают из ЛК
     if (!data) return;                    // hasPin ещё неизвестен — ждём GET
     if (data.hasPin) return;              // ждём ввод PIN
     initialLoadDone.current = true;
-    post({}).then(err => {
+    post({}, true).then(err => {
       if (err) { initialLoadDone.current = false; setNotice(err); return; }
       sessionStorage.setItem('dbs_pin_ok', '1');
       if (pin) sessionStorage.setItem('dbs_pin', pin);
@@ -349,7 +350,7 @@ export default function SupplierServicePage() {
     setNnBusy(true);
     try {
       const imageName = `market-news-${Date.now()}-${file.name.replace(/[^\w.]/g, '_')}`;
-      const url = await uploadLkFile(file, imageName);
+      const url = await uploadLkFile(file, imageName, token);
       setNnImage(url);
     } catch { toast.error('Ошибка загрузки файла'); }
     finally { setNnBusy(false); }
@@ -383,7 +384,7 @@ export default function SupplierServicePage() {
     setMatBusy(true);
     try {
       const imageName = `media-materials-${Date.now()}-${file.name.replace(/[^\w.]/g, '_')}`;
-      const url = await uploadLkFile(file, imageName);
+      const url = await uploadLkFile(file, imageName, token);
       setMatImage(url);
     } catch { toast.error('Ошибка загрузки файла'); }
     finally { setMatBusy(false); }
@@ -497,7 +498,7 @@ export default function SupplierServicePage() {
 
   async function submitPin() {
     setPinError('');
-    const err = await post({}); // пустой PATCH — сервер проверит PIN (403 при неверном)
+    const err = await post({}, true); // пустой PATCH — сервер проверит PIN (403 при неверном)
     if (err) { setPinError(err); setPin(''); }
     else {
       sessionStorage.setItem('dbs_pin_ok','1');
@@ -972,7 +973,7 @@ export default function SupplierServicePage() {
                         className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400 shrink-0">✕</button>
                     </div>
                     {newsModal.fullText
-                      ? <div className="text-sm text-gray-700 leading-relaxed break-words [&_img]:max-w-full [&_table]:max-w-full" dangerouslySetInnerHTML={{ __html: newsModal.fullText }} />
+                      ? <div className="text-sm text-gray-700 leading-relaxed break-words [&_img]:max-w-full [&_table]:max-w-full" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(newsModal.fullText) }} />
                       : <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{newsModal.text}</p>}
                   </div>
                 </div>

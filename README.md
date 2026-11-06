@@ -77,10 +77,11 @@ pg_prove -U postgres tests/rls_isolation.sql   # ожидается 7/7
    ```
    `pg_hba.conf`: только локальные подключения + SSH-туннель; `listen_addresses = 'localhost'`.
 4. **Миграции** (через SSH/psql или временный контейнер под app_admin):
-   новая база → `migrations/0001_baseline.sql`, затем `0002…0005`;
-   переезд с Supabase → дамп данных (`pg_dump --data-only` без системных схем) + `0002…0005` поверх копии схемы.
-5. **Приложение API** (Coolify → Deploy from GitHub): build path `api/`, Dockerfile `api/Dockerfile`. Env: `DATABASE_URL` (app_user), `DATABASE_URL_ADMIN` (app_admin), `JWT_SECRET`, `SMTP_URL`, `PORT=3000`. Healthcheck: `GET /healthz`.
-6. **Фронт**: build `npm run build` → статика; прокси `/api` → сервис API (same-origin, фронт без CORS-кода).
+   новая база → `migrations/0001_baseline.sql`, затем все `0002…0011` по порядку;
+   переезд с Supabase → дамп данных (`pg_dump --data-only` без системных схем) + `0002…0011` поверх копии схемы;
+   обновление существующей прод-базы → применить только новые файлы (последние: `0009`–`0010` событийная синхронизация, **`0011` — исправление `domain_id` у заявок с форм**). Миграции идемпотентны.
+5. **Приложение API** (Coolify → Deploy from GitHub): build path `api/`, Dockerfile `api/Dockerfile`. Env: `DATABASE_URL` (app_user), `DATABASE_URL_ADMIN` (app_admin), `JWT_SECRET` (**≥ 32 символов, иначе API не стартует**), `CORS_ORIGINS`, `TRUST_PROXY_HOPS=1`, `SMTP_URL`, `PORT=3000`. Healthcheck: `GET /healthz`. После деплоя: в Coolify включить **Force HTTPS** для обоих доменов.
+6. **Фронт**: build `npm run build` → статика; если API на отдельном домене — задать `VITE_API_URL` и `CORS_ORIGINS` (домен(ы) CRM через запятую). Образ фронта (`Dockerfile`) копирует `nginx.conf` и `security-headers.inc` (CSP, HSTS и др.) — менять заголовки только там.
 7. **Фронт env**: `VITE_API_MODE=own`. GitHub → автодеплой при пуше.
 
 ## Переменные окружения
@@ -91,10 +92,13 @@ pg_prove -U postgres tests/rls_isolation.sql   # ожидается 7/7
 | `PORT` | порт (3000) |
 | `DATABASE_URL` | postgres://app_user:…@postgres:5432/erp — RLS-роль |
 | `DATABASE_URL_ADMIN` | postgres://app_admin:… — служебная (ЛК по токену, воркеры) |
-| `JWT_SECRET` | подпись JWT (только сервер) |
-| `SMTP_URL` / `EMAIL_FROM` | почтовый воркер (пусто — воркер off) |
+| `JWT_SECRET` | подпись JWT (только сервер), **обязательно ≥ 32 символов** (`openssl rand -hex 32`); с пустым/`change-me` API не запускается |
+| `CORS_ORIGINS` | домены CRM через запятую; пусто = любой origin (**только для разработки**) |
+| `TRUST_PROXY_HOPS` | сколько прокси перед API (Coolify/Traefik = 1; 0 — нет). От этого зависит IP для лимитов логина/форм/загрузок |
+| `RATE_LIMIT_PER_MIN` | общий лимит запросов с одного IP в минуту (по умолчанию 600) |
+| `SMTP_URL` / `EMAIL_FROM` | почтовый воркер (пусто — воркер off; письма копятся в `outbox_events`). Отправитель — только `EMAIL_FROM` |
 | `OFFER_ACCEPT_NOTIFY_TO` | email о принятии оферты ЛК (пусто — не слать) |
-| `TELEGRAM_BOT_TOKEN`, `MAX_API_BASE` | уведомления форм/ЛК (токен MAX — в настройках БД) |
+| `TELEGRAM_BOT_TOKEN`, `MAX_BOT_TOKEN`, `MAX_API_BASE` | уведомления форм (токены ботов — только в env; `MAX_API_BASE` по умолчанию platform-api2.max.ru). Каналы и получатели — в Настройки → Уведомления / Пользователи |
 
 **Фронт** (`.env`): `VITE_API_MODE` (`supabase`|`own`), `VITE_API_URL` (пусто = same-origin), `VITE_SUPABASE_URL/ANON_KEY` — только для supabase-режима.
 
@@ -145,4 +149,6 @@ Supabase Auth (→ свой JWT на profiles+bcrypt, миграция 0005), Po
 
 ## Чек-лист релиза
 
-1. `migrations/NNNN` применены (prod) → 2. `npm audit` (prod, high+) → 3. `npm run typecheck` → 4. `npm run build` (фронт + API) → 5. pgTAP зелёный → 6. smoke: вход / ЛК по токену / форма лида / письмо из ЛК → 7. тег версии + запись в MIGRATION.md.
+1. `migrations/NNNN` применены (prod; проверить `0011`) → 2. `npm audit` (фронт **и** `api/`, prod, high+) → 3. `npm run typecheck` → 4. `npm run build` (фронт + API) → 5. pgTAP зелёный → 6. smoke: вход / ЛК по токену / форма лида / письмо из ЛК → 7. тег версии + запись в MIGRATION.md.
+
+**Безопасность перед продом:** `JWT_SECRET` и `CORS_ORIGINS` заданы; Force HTTPS включён; RLS проверен на проде — `SELECT relname, relrowsecurity FROM pg_class WHERE relnamespace = 'public'::regnamespace AND relkind = 'r';` (в репозитории `ENABLE ROW LEVEL SECURITY` есть только у служебных таблиц событий и outbox, у бизнес-таблиц — сверить с боевой БД); порядок гонять смоук: заявка с каждой формы появляется в CRM без F5, ЛК нового поставщика открывается.

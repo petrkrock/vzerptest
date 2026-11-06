@@ -6,13 +6,17 @@ import { getStore } from '@/lib/store';
 import { toast } from 'sonner';
 import { Check, Eye, EyeOff, Lock, Settings } from 'lucide-react';
 
-// v1.31.17: «Запомнить пароль» — логин/пароль хранятся локально (localStorage), только по явной галочке.
+// Галочка «Запомнить» хранит ТОЛЬКО email (localStorage). Пароль в браузере не сохраняем:
+// его запоминает штатный менеджер паролей (поля с autoComplete). Старые записи с паролем зачищаются.
 const REMEMBER_KEY = 'vz_remember_login';
 
-function readSavedLogin(): { email: string; password: string } | null {
+function readSavedLogin(): { email: string } | null {
   try {
     const raw = localStorage.getItem(REMEMBER_KEY);
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) return null;
+    const { email } = JSON.parse(raw) as { email?: string };
+    localStorage.setItem(REMEMBER_KEY, JSON.stringify({ email: email || '' })); // вычищаем сохранённый ранее пароль
+    return { email: email || '' };
   } catch {
     return null;
   }
@@ -22,7 +26,7 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const saved = readSavedLogin();
   const [email, setEmail] = useState(saved?.email || '');
-  const [password, setPassword] = useState(saved?.password || '');
+  const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(Boolean(saved));
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -43,7 +47,7 @@ export default function LoginPage() {
       const user = await login(email, password);
       if (user) {
         if (remember) {
-          localStorage.setItem(REMEMBER_KEY, JSON.stringify({ email, password }));
+          localStorage.setItem(REMEMBER_KEY, JSON.stringify({ email }));
         } else {
           localStorage.removeItem(REMEMBER_KEY);
         }
@@ -100,7 +104,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setRemember(v => !v)}
-                  title="Запомнить пароль"
+                  title="Запомнить email"
                   aria-pressed={remember}
                   className={`absolute right-10 top-1/2 -translate-y-1/2 transition-colors ${
                     remember ? 'text-gray-600' : 'text-gray-300 hover:text-gray-400'
