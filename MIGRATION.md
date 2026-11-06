@@ -1,3 +1,23 @@
+## v1.35.6 — Ремонт внешних форм (Настройки → Формы → код для сайта)
+
+**Причина:** при переезде public-form с Supabase edge function на API (`api/src/public`) потерялся контракт
+версии 1.31.18. Фронт (PublicFormPage, SettingsPage, constants) не менялся и совпадает с 1.31.18.
+
+**GET /forms?type=…** — поля = core + alwaysShow + выбранные админом (`{key, required}`), порядок как в
+`FORM_FIELD_DEFINITIONS`; в ответе снова `inputType`, `required`, `defaultValue`, `options`. Убран флаг `visible`
+(фронт его не сохраняет — из-за него необязательные поля пропадали из формы).
+**POST /forms** — whitelist по конфигу админа, проверка обязательности с подписью поля, `defaultValue`
+(торговые точки = 1). Колонки — по реальной схеме БД (`prod_baseline.sql` + 0007): в `suppliers`/`buyers` нет
+`token`/`name`, поэтому все три INSERT падали и заявки терялись; `contact_prefs`/`history` — jsonb (JSON-строкой),
+`own_brands` — массив из строки «а, б», оборот → буква категории A/B/C, `locations_count`, `services` = DBS для
+поставщика, статус «Новый с сайта» (обращения — «Новый запрос с формы»), источник «Форма с сайта», `from_api = true`,
+история в формате `HistoryEntry`; у обращений заполняется `subject` (NOT NULL).
+**Ошибки** отдаются как `{ error }` — именно это поле читает PublicFormPage (раньше посетитель видел «Bad Request»).
+**Дедуп** покупателей работает и без ИНН (телефон/email). Заявка с дублем не создаётся, менеджеру уходит уведомление.
+**Убрано лишнее:** ступенчатый INSERT-fallback (скрывал ошибку схемы), `leadDefaultStatus/Type`, `requireConsent`,
+`settings.leads`-дедуп, второй контракт `{data, loadedAt, website}`, лишнее поле `address` у покупателя,
+мёртвые `personalEmail`/`responsibleId` в notify.ts. Миграций БД не требуется.
+
 ## v1.35.3 — Финал боевой стабилизации (данные, ЛК, оферта, typecheck)
 
 **Данные (симптом «сливает после F5»):** портирована вся цепочка фиксов боевой сессии —
