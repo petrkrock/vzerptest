@@ -100,8 +100,10 @@ export default function Dashboard() {
     { label: 'Задач', value: (okTasks ? store.tasks : []).filter(t => !t.deletedAt && !t.responsibleId && canSeeTask(t)).length, to: '/tasks', visible: okTasks },
     { label: 'Поддержки', value: (okSupport ? store.tickets.filter(t => canSeeTicket(t)) : []).filter(t => !t.deletedAt && !t.responsibleId).length, to: '/support', visible: okSupport },
   ].filter(r => r.visible);
-  // v_1.9: заявки Маркетинг-кит из форм сайта (статусы «Запрос МК» / «Отправлен МК»)
-  const mkRequests = store.mediaRecords.filter(r => r.status === 'Запрос МК' || r.status === 'Отправлен МК');
+  // Продвижение: размещения «Заявка создана», новости «Новая», договоры «в работе» (в данных — статус «Новый»)
+  const promoPlacements = mediaRecords.filter(r => r.status === 'Заявка создана').length;
+  const promoNews = okMedia ? (store.settings.marketNews || []).filter(n => n.status === 'Новая').length : 0;
+  const promoContracts = okMedia ? (store.settings.mediaContracts || []).filter(c => c.status === 'Новый').length : 0;
   const newTickets = (okSupport ? store.tickets.filter(t => canSeeTicket(t)) : []).filter(t => (t.status === 'Новый запрос' || t.status === 'Новый запрос с формы') && !t.deletedAt); // v_1.9: «Новый запрос» / «Новый запрос с формы»
 
   // Формы: заявки, пришедшие с публичных форм (Настройки → Формы) и ещё не
@@ -125,7 +127,7 @@ export default function Dashboard() {
     { label: 'Поставщиков', value: activeSuppliers.length, active: activeSuppliers.filter(s => s.status === 'Активный').length, icon: Truck, to: '/suppliers', color: 'bg-blue-50 text-blue-600' },
     { label: 'Покупателей', value: activeBuyers.length, active: activeBuyers.filter(b => b.status === 'Активный').length, icon: ShoppingCart, to: '/buyers', color: 'bg-green-50 text-green-600' },
     { label: 'Заявок с сайта', value: siteLeads.length, icon: Globe, color: 'bg-purple-50 text-purple-600' }, // v_1.9: карточка не кликабельна, ссылки внутри
-    { label: 'Медиа сервис', value: mkRequests.length, icon: FileEdit, to: '/media', color: 'bg-red-50 text-red-600' }, // v_1.9: Маркетинг-кит (Запрос МК/Отправлен МК)
+    { label: 'Медиа сервис', value: promoPlacements + promoNews + promoContracts, icon: FileEdit, color: 'bg-red-50 text-red-600' }, // карточка не кликабельна, ссылки внутри
   ];
 
   const showMediaAlerts = endingSoonRecords.length > 0 || upcomingStartRecords.length > 0;
@@ -150,6 +152,15 @@ export default function Dashboard() {
                 <Link to="/buyers?status=Новый с сайта" onClick={e => e.stopPropagation()}
                   className="text-[11px] font-medium px-2 py-1 rounded-md transition-opacity hover:opacity-80 w-full sm:w-auto text-center"
                   style={{ backgroundColor: 'rgb(239, 246, 255)', color: 'rgb(29, 78, 216)' }}>Покупатели: {siteLeadsBuy.length}</Link>
+              </div>
+            ) : null}
+            {stat.label === 'Медиа сервис' ? (
+              <div className="flex gap-1 mt-1.5">
+                {([['Размещения', promoPlacements, 'placements'], ['Новости', promoNews, 'news'], ['Договора', promoContracts, 'contracts']] as const).map(([label, count, view]) => (
+                  <Link key={view} to={`/media?view=${view}`} onClick={e => e.stopPropagation()}
+                    className="flex-1 min-w-0 text-[11px] font-medium px-1.5 py-1 rounded-md transition-opacity hover:opacity-80 text-center whitespace-nowrap"
+                    style={{ backgroundColor: 'rgb(254, 242, 242)', color: 'rgb(185, 28, 28)' }}>{label}: {count}</Link>
+                ))}
               </div>
             ) : null}
             {stat.active !== undefined && (

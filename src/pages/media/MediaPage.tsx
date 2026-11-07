@@ -1,5 +1,5 @@
 import { Fragment, useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getStore, updateStore, useStoreVersion } from '@/lib/store';
 import { apiFilesUploadFile } from '@/lib/api';
 import { generateId, formatDate } from '@/lib/utils';
@@ -47,7 +47,12 @@ const [deleteWord, setDeleteWord] = useState('');
   const [historyRecordId, setHistoryRecordId] = useState<string | null>(null); // v1.30.61: просмотр истории записи
   // v1.30.62: раздел «Договора»
   // v1.30.69: вид «Новости рынка»
-  const [view, setView] = useState<'placements' | 'contracts' | 'news'>('placements');
+  // ?view=placements|news|contracts — ссылки из дашборда открывают нужный вид
+  const [searchParams] = useSearchParams();
+  const initialView = searchParams.get('view');
+  const [view, setView] = useState<'placements' | 'contracts' | 'news'>(
+    initialView === 'news' || initialView === 'contracts' ? initialView : 'placements',
+  );
   const [showNewsForm, setShowNewsForm] = useState(false);
   const [editingNewsId, setEditingNewsId] = useState<string | null>(null);
   const [mnSupplierId, setMnSupplierId] = useState('');

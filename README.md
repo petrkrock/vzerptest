@@ -77,9 +77,9 @@ pg_prove -U postgres tests/rls_isolation.sql   # ожидается 7/7
    ```
    `pg_hba.conf`: только локальные подключения + SSH-туннель; `listen_addresses = 'localhost'`.
 4. **Миграции** (через SSH/psql или временный контейнер под app_admin):
-   новая база → `migrations/0001_baseline.sql`, затем все `0002…0011` по порядку;
-   переезд с Supabase → дамп данных (`pg_dump --data-only` без системных схем) + `0002…0011` поверх копии схемы;
-   обновление существующей прод-базы → применить только новые файлы (последние: `0009`–`0010` событийная синхронизация, **`0011` — исправление `domain_id` у заявок с форм**). Миграции идемпотентны.
+   новая база → `migrations/0001_baseline.sql`, затем все `0002…0012` по порядку;
+   переезд с Supabase → дамп данных (`pg_dump --data-only` без системных схем) + `0002…0012` поверх копии схемы;
+   обновление существующей прод-базы → применить только новые файлы (последние: `0009`–`0010` событийная синхронизация, `0011` — исправление `domain_id` у заявок с форм, `0012` — даты создания условий проценки). Миграции идемпотентны.
 5. **Приложение API** (Coolify → Deploy from GitHub): build path `api/`, Dockerfile `api/Dockerfile`. Env: `DATABASE_URL` (app_user), `DATABASE_URL_ADMIN` (app_admin), `JWT_SECRET` (**≥ 32 символов, иначе API не стартует**), `CORS_ORIGINS`, `TRUST_PROXY_HOPS=1`, `SMTP_URL`, `PORT=3000`. Healthcheck: `GET /healthz`. После деплоя: в Coolify включить **Force HTTPS** для обоих доменов.
 6. **Фронт**: build `npm run build` → статика; если API на отдельном домене — задать `VITE_API_URL` и `CORS_ORIGINS` (домен(ы) CRM через запятую). Образ фронта (`Dockerfile`) копирует `nginx.conf` и `security-headers.inc` (CSP, HSTS и др.) — менять заголовки только там.
 7. **Фронт env**: `VITE_API_MODE=own`. GitHub → автодеплой при пуше.

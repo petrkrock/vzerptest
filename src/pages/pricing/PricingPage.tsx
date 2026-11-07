@@ -119,8 +119,8 @@ export default function PricingPage() {
   const whList = (s: SupplierRow): WhLoc[] => ((s as unknown as { warehouse_locations?: WhLoc[] }).warehouse_locations) || [];
   const whVerified = (s: SupplierRow, name?: string) => !!name && whList(s).some(w => (w.city || '') === name && !!w.verified);
 
-  // ТЗ v1.24.6: сортировка по умолчанию — чем новее, тем выше
-  const dateOf = (c: Cond): number => { const t = c.updatedAt || c.createdAt || ''; return t ? new Date(t).getTime() : 0; };
+  // Сортировка по умолчанию — чем новее заявка (дата СОЗДАНИЯ), тем выше; правка условия порядок не меняет
+  const dateOf = (c: Cond): number => (c.createdAt ? new Date(c.createdAt).getTime() : 0);
   const dateStr = (c: Cond): string => {
     const t = dateOf(c); if (!t) return '';
     const d = new Date(t);
