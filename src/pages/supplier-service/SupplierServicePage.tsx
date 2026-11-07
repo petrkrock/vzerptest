@@ -8,6 +8,8 @@ import { uploadLkFile } from '@/lib/lk-upload'; // v1.30.76: загрузка к
 import { toast } from 'sonner'; // v1.30.76: toast был не определён — модалки не закрывались
 import { AlertCircle, Check, ChevronDown, Copy, Headset, Info, LayoutDashboard, LogOut, Pencil, Plus, Trash2, Truck, Warehouse, X } from 'lucide-react';
 
+const pinSaveKey = (token: string) => `dbs_pin_saved:${token}`; // PIN, сохранённый на устройстве по галочке
+
 interface Wh { id: string; city: string; skuCount: number; verified?: boolean; address?: string; status?: 'Новый' | 'Проверен' | 'Заморожен'; } // ТЗ v1.25.0: +адрес, +статус
 interface Cond { city: string; warehouseName: string; representative: string; contacts: string;
   email: string; deliverySchedule: string; orderUnloadSchedule: string; returnConditions: string; officialWarehouse: string;
@@ -47,7 +49,8 @@ export default function SupplierServicePage() {
   const [loading, setLoading] = useState(true);
   const [fatal, setFatal] = useState('');
   const [pinPassed, setPinPassed] = useState(() => sessionStorage.getItem('dbs_pin_ok') === '1'); // ТЗ v1.23.19: переживает F5
-  const [pin, setPin] = useState(() => sessionStorage.getItem('dbs_pin') || ''); // ТЗ v1.23.39: переживает F5
+  const [pin, setPin] = useState(() => sessionStorage.getItem('dbs_pin') || localStorage.getItem(pinSaveKey(token)) || ''); // ТЗ v1.23.39: переживает F5
+  const [savePin, setSavePin] = useState(() => !!localStorage.getItem(pinSaveKey(token)));
   const [pinError, setPinError] = useState('');
   const [whCity, setWhCity] = useState('');
   const [whAddress, setWhAddress] = useState(''); // ТЗ v1.25.0: адрес склада
@@ -499,10 +502,11 @@ export default function SupplierServicePage() {
   async function submitPin() {
     setPinError('');
     const err = await post({}, true); // пустой PATCH — сервер проверит PIN (403 при неверном)
-    if (err) { setPinError(err); setPin(''); }
+    if (err) { setPinError(err); setPin(''); localStorage.removeItem(pinSaveKey(token)); }
     else {
       sessionStorage.setItem('dbs_pin_ok','1');
       sessionStorage.setItem('dbs_pin', pin);
+      if (savePin) localStorage.setItem(pinSaveKey(token), pin); else localStorage.removeItem(pinSaveKey(token));
       setPinPassed(true);
       loadLkInfo(); // v1.30.87: сразу после входа
     }
@@ -617,21 +621,29 @@ export default function SupplierServicePage() {
         )}
 
         {!loading && !fatal && data && !pinPassed && (
-          <div className="bg-white border border-gray-200 rounded-2xl p-6 sm:p-8">
+          <div className="bg-white rounded-2xl p-6 sm:p-8">
             <p className="text-sm text-gray-500 mt-1.5 text-center">{data.companyName}{data.inn ? ` (ИНН ${data.inn})` : ''}</p>
             <hr className="border-gray-100 my-5" />
             <div className="text-center">
-              <p className="text-sm text-gray-700 mb-4">Введите PIN-код из сообщения от менеджера</p>
-              <input inputMode="numeric" maxLength={6} value={pin} autoFocus
-                onChange={e => setPin(e.target.value.replace(/\D/g, ''))}
-                onKeyDown={e => e.key === 'Enter' && submitPin()}
-                className="w-40 text-center text-xl tracking-[0.4em] border border-gray-200 rounded-xl py-2.5 outline-none focus:ring-2 focus:ring-red-500/40 focus:border-red-400" />
+              <p className="text-sm text-gray-700 mb-4">Введите PIN-код</p>
+              <div className="relative inline-block">
+                <input inputMode="numeric" maxLength={6} value={pin} autoFocus
+                  onChange={e => setPin(e.target.value.replace(/\D/g, ''))}
+                  onKeyDown={e => e.key === 'Enter' && submitPin()}
+                  className="w-52 px-9 text-center text-xl tracking-[0.4em] border border-gray-200 rounded-xl py-2.5 outline-none focus:ring-2 focus:ring-red-500/40 focus:border-red-400" />
+                <button type="button" aria-pressed={savePin} title="Сохранить PIN-код на этом устройстве"
+                  onClick={() => { const v = !savePin; setSavePin(v); if (!v) localStorage.removeItem(pinSaveKey(token)); }}
+                  className={`absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md transition-colors ${savePin ? 'text-gray-500' : 'text-gray-300 hover:text-gray-400'}`}>
+                  <Check className="w-4 h-4" />
+                </button>
+              </div>
               {pinError && <p className="text-xs text-red-600 mt-3">{pinError}</p>}
               <button onClick={submitPin} disabled={saving}
                 className="w-full mt-4 bg-red-600 hover:bg-red-700 text-white font-semibold text-sm rounded-xl py-3 transition-colors disabled:opacity-60">
                 Продолжить
               </button>
-              <p className="text-xs text-gray-400 mt-4">Ссылка индивидуальная. PIN потерян — обратитесь к менеджеру.</p>
+              <p className="text-xs text-gray-400 mt-4">Если вы забыли PIN-код, пожалуйста, обратитесь в{' '}
+                <a href="https://vsemzapchasti.ru/support" target="_blank" rel="noopener noreferrer" className="underline hover:text-red-600">службу поддержки</a>.</p>
             </div>
           </div>
         )}

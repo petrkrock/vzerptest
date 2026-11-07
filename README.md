@@ -1,6 +1,6 @@
 # ВсемЗапчасти ERP (VZ ERP)
 
-> Текущая версия: **1.35.11**
+> Текущая версия: **1.35.12**
 > ERP-система платформы автозапчастей: поставщики, покупатели, лиды, задачи, поддержка, медиаразмещения, аналитика, план/факт, ЛК поставщика, публичные формы.
 
 ---
@@ -78,6 +78,7 @@ pg_prove -U postgres tests/rls_isolation.sql
 5. **API** (Deploy from GitHub): build path `api/`, Dockerfile `api/Dockerfile`, домен `api.example.ru`, порт 3000, healthcheck `GET /healthz`.
    Env: `DATABASE_URL` (app_user), `DATABASE_URL_ADMIN` (app_admin), `JWT_SECRET` (≥ 32 символов, иначе API не стартует),
    `CORS_ORIGINS=https://crm.example.ru`, `TRUST_PROXY_HOPS=1`; для почты `SMTP_URL`, `EMAIL_FROM`; для ботов — токены (таблица ниже).
+   **Persistent Storage**: смонтировать постоянный том на `/data/uploads` (иначе загруженные картинки пропадут при каждом деплое). При bind-mount каталог на хосте — владелец `1000:1000` (пользователь `node`).
 6. **Первый администратор**: Coolify → API → Terminal:
    ```bash
    ADMIN_PASSWORD='пароль-от-12-символов' node scripts/create-admin.js
@@ -101,7 +102,8 @@ pg_prove -U postgres tests/rls_isolation.sql
 | `TRUST_PROXY_HOPS` | сколько прокси перед API (Coolify/Traefik = 1; 0 — нет). От этого зависит IP для лимитов логина/форм/загрузок |
 | `RATE_LIMIT_PER_MIN` | общий лимит запросов с одного IP в минуту (по умолчанию 600) |
 | `SMTP_URL` / `EMAIL_FROM` | почтовый воркер (пусто — воркер off; письма копятся в `outbox_events`). Отправитель — только `EMAIL_FROM` |
-| `OFFER_ACCEPT_NOTIFY_TO` | email о принятии оферты ЛК (пусто — не слать) |
+| `UPLOAD_DIR` | каталог загрузок (в образе `/data/uploads`) — на него монтируется постоянный том |
+| `DB_POOL_MAX` | размер пула соединений на каждую роль (по умолчанию 10) |
 | `TELEGRAM_BOT_TOKEN`, `MAX_BOT_TOKEN`, `MAX_API_BASE` | уведомления форм (токены ботов — только в env; `MAX_API_BASE` по умолчанию platform-api2.max.ru). Каналы и получатели — в Настройки → Уведомления / Пользователи |
 
 **Фронт** (задаются при сборке): `VITE_API_URL` — адрес API (`https://api.example.ru`). Секретов во фронте нет.

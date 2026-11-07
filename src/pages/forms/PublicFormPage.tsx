@@ -181,7 +181,7 @@ export default function PublicFormPage() {
         )}
 
         {!loading && !loadError && config && config.enabled && !submitted && (
-          <form onSubmit={handleSubmit} className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5 space-y-2">
+          <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm p-4 sm:p-5 space-y-2">
             {isWizard && (
               <div className="flex items-center justify-between">
                 <span className="text-xs text-gray-400">Шаг {step} из 2</span>
