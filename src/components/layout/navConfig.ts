@@ -1,4 +1,4 @@
-import { LayoutDashboard, Truck, ShoppingCart, CheckSquare, BarChart2, TrendingUp, HeadphonesIcon, Settings, Database, Video, BookOpen, Server, Percent, LayoutGrid, Package, Cog } from 'lucide-react';
+import { LayoutDashboard, Truck, ShoppingCart, CheckSquare, BarChart2, TrendingUp, HeadphonesIcon, Settings, Database, Video, BookOpen, Percent, LayoutGrid, Package, Cog } from 'lucide-react';
 import { canAccess, isAdmin } from '@/lib/auth';
 
 interface NavItem {
@@ -27,7 +27,6 @@ const ALL_NAV_ITEMS: NavItem[] = [
   { to: '/settings', label: 'Настройки', icon: Settings, visible: () => isAdmin() },
   { to: '/knowledge', label: 'База знаний', icon: BookOpen, visible: () => canAccess('knowledge') },
   { to: '/database', label: 'База данных', icon: Database, visible: () => isAdmin() },
-  { to: '/server', label: 'Сервер', icon: Server, visible: () => isAdmin() },
 ];
 
 /**

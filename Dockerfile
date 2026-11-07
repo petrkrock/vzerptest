@@ -1,21 +1,10 @@
 # ============================================================
-# ВСЕМЗАПЧАСТИ CRM — production image
+# VZ ERP — production image фронта (Vite/React → nginx)
 # ============================================================
-# Builds the Vite/React app and serves the static output with nginx.
-#
-# Build:
-#   docker build \
-#     --build-arg VITE_SUPABASE_URL=https://yourproject.supabase.co \
-#     --build-arg VITE_SUPABASE_ANON_KEY=your-anon-key \
-#     -t vz-crm .
-#
-# Run:
-#   docker run -d -p 8080:80 --name vz-crm vz-crm
-#
-# (Vite env vars are baked into the static bundle at BUILD time, not read
-# at container start — this is normal for client-side apps. If you need to
-# change them, rebuild the image. See README.md for details and for the
-# docker-compose alternative that reads them from .env automatically.)
+# Build:  docker build --build-arg VITE_API_URL=https://api.example.ru -t vz-erp .
+# VITE_API_URL вшивается в бандл при СБОРКЕ (смена = пересборка). Фронт сам API не проксирует —
+# адрес API (https://api.example.ru) обязателен.
+# В Coolify: добавьте VITE_API_URL в Environment Variables как Build Variable.
 
 # ── Build stage ─────────────────────────────────────────────
 FROM node:22-alpine AS build
@@ -33,14 +22,8 @@ RUN npm install
 
 COPY . .
 
-ARG VITE_SUPABASE_URL
-ARG VITE_SUPABASE_ANON_KEY
-# Демо-режим (данные в localStorage, вход admin@admin.com / admin123).
-# Передавать --build-arg VITE_DEMO_MODE=true ТОЛЬКО для демонстрации, не для прода.
-ARG VITE_DEMO_MODE
-ENV VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
-ENV VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
-ENV VITE_DEMO_MODE=${VITE_DEMO_MODE}
+ARG VITE_API_URL
+ENV VITE_API_URL=${VITE_API_URL}
 
 RUN npm run build
 

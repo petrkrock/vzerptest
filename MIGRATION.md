@@ -1,3 +1,18 @@
+## v1.35.11 — Подготовка к первому деплою (чистка + первый запуск)
+
+**Удалено (остатки Supabase/Vercel/VPS и опасный мусор, 17 файлов):** `api/seed_admin.sql` (админ с паролем `admin123`), `api/seed_hash.js`
+(пароль БД в коде), `api/check_hash.js`, `api/fix_hash.sql`, `migrations/prod_baseline.sql` (устарел — без 0008–0012, создавал роли с паролем по умолчанию),
+`DB_CODE_DOC_MATRIX.md`, `PRODUCTION_RELEASE.md`, `READMEgo.md`, `READMEstart.md`, `README.SERVER.md`, `vercel.json`, `docker-compose.yml`,
+`ecosystem.config.js`, `server/monitor-server.js`, `deploy/nginx.conf`, `.github/workflows/deploy.yml`, `public/logocrmico.png`.
+
+**Первый запуск:** `api/scripts/create-admin.js` — создаёт админа `admin@vz.tech` с паролем из `ADMIN_PASSWORD` (≥ 12 символов), хеш bcrypt. Скрипт копируется в образ API.
+**README переписан под реальный деплой в Coolify:** два домена (фронт и API), `app_admin` создаётся с `BYPASSRLS`, миграции под владельцем БД командой-циклом,
+`VITE_API_URL` как Build Variable (фронт API не проксирует — раньше в README ошибочно стояло «same-origin»), смоук-тест и чек-лист безопасности.
+**Фронт:** `Dockerfile` принимает `VITE_API_URL` (раньше — только мёртвые аргументы Supabase и `VITE_DEMO_MODE`); `.env.example` очищен; из меню убран пункт «Сервер» без страницы.
+**CI:** `verify.yml` — typecheck и сборка фронта и API, аудит обоих; убраны секреты Supabase.
+
+**Для чистой установки:** `0001_baseline.sql` → `0002…0012` по порядку (одним циклом, см. README).
+
 ## v1.35.10 — Поправки перед продакшном
 
 1. **Дашборд → «Медиа сервис»:** карточка стала нефункциональной целиком (как «Заявок с сайта»), внутри три кнопки в строку:

@@ -413,7 +413,7 @@ settings.taskTypes = Array.from(new Set([...(settings.taskTypes || []).filter((t
     });
 
     // v1.35.3-fix8_13: легаси-админ 'admin-1' имел не-UUID id — бэкенд занулял responsible_id при синке.
-    // Переводим на UUID из seed_admin.sql и чиним ссылки в сущностях.
+    // Переводим на UUID администратора по умолчанию (api/scripts/create-admin.js) и чиним ссылки в сущностях.
     const LEGACY_ADMIN_ID = 'admin-1';
     const ADMIN_ID = '00000000-0000-4000-8000-000000000099';
     if (settings.users.some(u => u.id === LEGACY_ADMIN_ID)) {
