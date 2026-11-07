@@ -75,19 +75,25 @@ export function withStatuses(
   incoming: Array<Record<string, string>>,
   existing: Array<Record<string, unknown>>,
 ): Array<Record<string, string>> {
+  const now = new Date().toISOString();
   return incoming.map(c => {
     const match = (existing || []).find(
       e => String(e.city || '').toLowerCase() === c.city.toLowerCase() &&
         String(e.warehouseName || '').toLowerCase() === (c.warehouseName || '').toLowerCase(),
     );
-    if (!match) return { ...c, status: 'Новое' };
+    if (!match) return { ...c, status: 'Новое', createdAt: now, updatedAt: now };
+    // Дата создания фиксируется один раз и переносится из прежней записи (валидатор её отбрасывает).
+    const createdAt = String(match.createdAt || now);
+    const changed = SS_KEYS.some(k => String(match[k] ?? '').trim() !== c[k]);
+    const updatedAt = changed ? now : String(match.updatedAt || createdAt);
     const prev = (match.status as string) || 'Новое';
     const inc = c.status || prev;
-    if (inc === 'Удаление') return { ...c, status: 'Удаление' };
+    if (inc === 'Удаление') return { ...c, status: 'Удаление', createdAt, updatedAt };
     const CLIENT_OK = (st: string) => st === 'Новое' || st === 'Есть изменения' || st === 'Удаление';
-    const changed = SS_KEYS.some(k => String(match[k] ?? '').trim() !== c[k]);
-    if (changed && prev === 'Загружено') return { ...c, status: 'Есть изменения' };
-    if (!changed) return { ...c, status: match.status ? prev : 'Загружено' };
-    return { ...c, status: CLIENT_OK(prev) ? prev : 'Новое' };
+    let status: string;
+    if (changed && prev === 'Загружено') status = 'Есть изменения';
+    else if (!changed) status = match.status ? prev : 'Загружено';
+    else status = CLIENT_OK(prev) ? prev : 'Новое';
+    return { ...c, status, createdAt, updatedAt };
   });
 }

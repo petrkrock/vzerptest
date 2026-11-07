@@ -1,5 +1,9 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
-import { Pool, PoolClient } from 'pg';
+import { Pool, PoolClient, types } from 'pg';
+
+// DATE (oid 1082) отдаём строкой 'YYYY-MM-DD'. По умолчанию pg превращает её в Date в часовом поясе сервера,
+// а JSON отдаёт UTC → «Срок» задачи, даты размещений после F5 сдвигались на день назад.
+types.setTypeParser(1082, (value: string) => value);
 
 export interface RequestUser {
   sub: string;
