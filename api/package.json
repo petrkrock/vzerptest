@@ -1,6 +1,6 @@
 {
   "name": "vz-erp-api",
-  "version": "1.35.10",
+  "version": "1.35.11",
   "private": true,
   "description": "VZ ERP API — замена PostgREST + Edge Functions + Auth Supabase (NestJS + Fastify)",
   "scripts": {

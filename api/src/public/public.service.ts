@@ -186,7 +186,7 @@ export class PublicService {
     return { success: true };
   }
 
-  // Одна вставка с колонками реальной схемы (migrations/prod_baseline.sql + 0007). Ошибка БД — в лог и 500:
+  // Одна вставка с колонками реальной схемы (migrations/0001…0007). Ошибка БД — в лог и 500:
   // раньше «ступенчатый fallback» глотал её, и заявки молча терялись.
   private async insert(type: PublicFormType, clean: Record<string, unknown>, settings: Record<string, unknown>, date: string) {
     const prefs = [clean.contactPref].flat().filter(Boolean);
