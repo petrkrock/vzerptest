@@ -23,6 +23,9 @@ COPY package-lock.json* ./
 RUN npm install --omit=dev && npm cache clean --force
 COPY --from=build /app/dist ./dist
 COPY scripts ./scripts
+# Каталог загрузок (картинки ЛК, файлы) — подключите к нему постоянный том (Persistent Storage в Coolify).
+ENV UPLOAD_DIR=/data/uploads
+RUN mkdir -p /data/uploads && chown -R node:node /data
 EXPOSE 3000
 USER node
 CMD ["node", "dist/main.js"]

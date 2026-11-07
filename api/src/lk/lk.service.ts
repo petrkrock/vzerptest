@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, NotFoundException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, HttpException, HttpStatus, NotFoundException, Injectable } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { DatabaseService } from '../database/database.service';
 import { EventLogService } from '../events/event-log.service';
@@ -66,6 +66,9 @@ function fixMojibake(s: string): string {
   catch { return s; }
 }
 
+const PIN_MAX_FAILS = 3;
+const PIN_LOCK_MS = 15 * 60 * 1000;
+
 @Injectable()
 export class LkService {
   constructor(
@@ -100,14 +103,39 @@ export class LkService {
   // ─────────────────────────────────────────────────────────────
   // POST /lk — зеркало edge-функции supplier-service v1.31.18.
   // ─────────────────────────────────────────────────────────────
+  // 3 неверных PIN подряд → доступ по этой ссылке закрыт на 15 минут (в т.ч. для верного PIN — иначе перебор).
+  // Счётчик на токен (в памяти процесса); попадают сюда только существующие токены. Верный PIN сбрасывает счётчик.
+  private pinFails = new Map<string, { count: number; resetAt: number }>();
+
+  private checkPin(token: string, expected: string | undefined, provided: unknown): void {
+    const now = Date.now();
+    let rec = this.pinFails.get(token);
+    if (rec && now >= rec.resetAt) rec = undefined;
+    if (rec && rec.count >= PIN_MAX_FAILS) throw this.pinLocked(rec.resetAt - now);
+    if (pinOk(expected, provided)) {
+      if (rec) this.pinFails.delete(token);
+      return;
+    }
+    const count = (rec?.count ?? 0) + 1;
+    this.pinFails.set(token, { count, resetAt: count >= PIN_MAX_FAILS ? now + PIN_LOCK_MS : (rec?.resetAt ?? now + PIN_LOCK_MS) });
+    if (this.pinFails.size > 10_000) for (const [k, v] of this.pinFails) if (now >= v.resetAt) this.pinFails.delete(k);
+    if (count >= PIN_MAX_FAILS) throw this.pinLocked(PIN_LOCK_MS);
+    throw new ForbiddenException('Неверный PIN-код');
+  }
+
+  private pinLocked(ms: number): HttpException {
+    return new HttpException(
+      `Слишком много неверных попыток. Повторите через ${Math.max(1, Math.ceil(ms / 60_000))} мин.`,
+      HttpStatus.TOO_MANY_REQUESTS,
+    );
+  }
+
   async post(body: Record<string, unknown>) {
     const token = String(body.token || '');
     if (!TOKEN_RE.test(token)) throw new BadRequestException('Недействительная ссылка');
     const supplier = await this.findByToken(token);
     if (supplier.deleted_at) throw new NotFoundException('Ссылка недействительна или доступ отключён');
-    if (!pinOk(this.readPin(supplier), body.pin)) {
-      throw new ForbiddenException('Неверный PIN-код'); // эталон: 403, без блокировок
-    }
+    this.checkPin(token, this.readPin(supplier), body.pin);
 
     const settings = await this.readSettings();
     const patch: Record<string, unknown> = {};

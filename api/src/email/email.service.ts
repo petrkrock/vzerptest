@@ -69,7 +69,7 @@ export class EmailService implements OnModuleInit, OnModuleDestroy {
     }
     try {
       await this.transporter!.sendMail({
-        from: process.env.EMAIL_FROM || process.env.SMTP_FROM,
+        from: process.env.EMAIL_FROM,
         to,
         subject: ev.payload.subject || 'Уведомление ВсемЗапчасти ERP',
         text: ev.payload.text || '',
